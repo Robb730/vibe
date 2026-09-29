@@ -24,10 +24,10 @@ export default function CreditsModal({ onClose }) {
       aria-label="Credits"
     >
       <div
-        className="modal-pop glass-deep max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl p-6"
+        className="modal-pop glass-deep relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-[#10101c]/90 px-6 py-4 backdrop-blur-xl">
           <VibeLogo size="sm" />
           <button
             onClick={onClose}
@@ -38,14 +38,16 @@ export default function CreditsModal({ onClose }) {
           </button>
         </div>
 
-        <h3 className="font-display mt-4 text-2xl font-black">
-          Credits <span className="text-gradient">.</span>
-        </h3>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-          The people and services behind vibe.
-        </p>
+        <div className="credits-scroll -mx-1 overflow-y-auto px-6 py-5" style={{ maxHeight: 'calc(85vh - 73px)' }}>
+          <div className="pointer-events-none absolute inset-x-6 top-[73px] z-10 h-6 bg-gradient-to-b from-[#10101c] to-transparent" aria-hidden />
+          <h3 className="font-display text-2xl font-black">
+            Credits <span className="text-gradient">.</span>
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+            The people and services behind vibe.
+          </p>
 
-        <div className="mt-5 grid gap-3">
+          <div className="mt-5 grid gap-3">
           <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-violet-600/20 to-transparent p-4">
             <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-violet-300">
               <Code2 className="h-3.5 w-3.5" /> Lead Developer
@@ -101,12 +103,14 @@ export default function CreditsModal({ onClose }) {
               </a>
             </p>
           </div>
-        </div>
 
-        <p className="handwritten mt-5 text-center text-xl text-zinc-500">
-          good music. better people.
-        </p>
+          <p className="handwritten mt-5 text-center text-xl text-zinc-500">
+            good music. better people.
+          </p>
+        </div>
+        <div className="pointer-events-none absolute inset-x-6 bottom-0 h-8 bg-gradient-to-t from-[#10101c] to-transparent" aria-hidden />
       </div>
+    </div>
     </div>
   )
 }
