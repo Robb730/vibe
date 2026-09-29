@@ -1,0 +1,213 @@
+import { ArrowLeft, Check, Copy, Crown, LogOut } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { supabase, ensureAnonSession } from '../lib/supabase.js'
+import { useRoom } from '../hooks/useRoom.js'
+import VibeLogo from '../components/VibeLogo.jsx'
+import VibeLoader from '../components/VibeLoader.jsx'
+import Avatar from '../components/Avatar.jsx'
+import Background from '../components/Background.jsx'
+import AuthBanner from '../components/AuthBanner.jsx'
+import JoinGate from '../components/JoinGate.jsx'
+import Lobby from '../phases/Lobby.jsx'
+import PromptEntry from '../phases/PromptEntry.jsx'
+import SongPick from '../phases/SongPick.jsx'
+import Guessing from '../phases/Guessing.jsx'
+import Results from '../phases/Results.jsx'
+
+const MAX_PLAYERS = 8
+
+const PHASE_LABEL = {
+  lobby: 'Lobby',
+  prompts: 'Writing prompts',
+  songs: 'Picking songs',
+  guessing: 'Guessing',
+  results: 'Results',
+}
+
+const iconBtn =
+  'flex h-10 items-center justify-center gap-2 rounded-full text-zinc-500 transition active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400'
+
+export default function Room() {
+  const { code } = useParams()
+  const { room, players, rounds, votes, loading, error, live } = useRoom(code)
+  const [myUserId, setMyUserId] = useState(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [authError, setAuthError] = useState(null)
+
+  useEffect(() => {
+    ensureAnonSession().then((err) => {
+      setAuthError(err)
+      supabase.auth.getUser().then(({ data }) => {
+        setMyUserId(data.user?.id ?? null)
+        setAuthReady(true)
+      })
+    })
+  }, [])
+
+  if (loading || !authReady) {
+    return (
+      <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950">
+        <Background />
+        <div className="relative px-6">
+          <VibeLoader message="Joining room" sub={code ? `Room ${String(code).toUpperCase()}` : 'Finding your vibe'} />
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !room) {
+    return (
+      <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950 p-6 text-zinc-100">
+        <Background />
+        <div className="relative grid max-w-sm justify-items-center gap-5 text-center">
+          <VibeLogo size="sm" />
+          <div>
+            <p className="text-lg font-semibold">Room not found</p>
+            <p className="mt-1 text-sm text-zinc-500">{error ?? 'Check the code and try again.'}</p>
+          </div>
+          <Link
+            to="/"
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 text-sm font-semibold text-black transition active:scale-[0.98]"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back home
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const host = players.find((p) => p.id === room.host_id)
+  const me = players.find((p) => p.user_id === myUserId)
+
+  // Invite-link visitor with no player row: nickname gate first.
+  // Reload after join guarantees entry even if realtime isn't applied yet;
+  // with 0003 applied the reload is a harmless one-time cost.
+  if (!me) {
+    return <JoinGate room={room} onJoined={() => window.location.reload()} />
+  }
+
+  const inviteLink = `${window.location.origin}/room/${room.code}`
+  const spotsLeft = Math.max(0, MAX_PLAYERS - players.length)
+
+  function copy() {
+    navigator.clipboard?.writeText(inviteLink).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div className="relative min-h-[100dvh] text-zinc-100">
+      <Background tone={room.phase} />
+      <div className="relative mx-auto grid w-full max-w-5xl gap-6 px-4 pb-12 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[1fr_240px] lg:grid-rows-[auto_1fr] lg:gap-x-12">
+        {/* Header */}
+        <header className="grid gap-5 lg:col-start-1 lg:row-start-1">
+          <div className="flex items-center gap-1">
+            <Link to="/" aria-label="Back home" className={`${iconBtn} -ml-2 w-10`}>
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <VibeLogo size="sm" />
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut()
+                window.location.href = '/'
+              }}
+              aria-label="Leave room"
+              className={`${iconBtn} ml-auto px-3 text-sm`}
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Leave</span>
+            </button>
+          </div>
+
+          <AuthBanner authError={authError} />
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="font-display text-3xl font-black tracking-tight">{room.code}</h1>
+              <p className="mt-1.5 flex items-center gap-2 truncate text-sm text-zinc-500">
+                <span
+                  role="status"
+                  aria-label={live ? 'Realtime connected' : 'Reconnecting'}
+                  title={live ? 'Realtime connected' : 'Reconnecting to realtime… run 0003_realtime.sql if this never turns green.'}
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${live ? 'bg-emerald-400' : 'animate-pulse bg-amber-400'}`}
+                />
+                <span className="truncate">
+                  {PHASE_LABEL[room.phase] ?? room.phase}
+                  {host ? `, hosted by ${host.nickname}` : ''}
+                </span>
+              </p>
+            </div>
+            <button
+              onClick={copy}
+              aria-live="polite"
+              className="flex h-10 shrink-0 items-center gap-2 rounded-full bg-zinc-900 px-4 text-sm font-medium text-zinc-200 ring-1 ring-inset ring-white/[0.08] transition active:scale-95 lg:hover:bg-zinc-800"
+            >
+              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4 text-zinc-400" />}
+              {copied ? 'Copied' : 'Invite'}
+            </button>
+          </div>
+        </header>
+
+        {/* Roster: horizontal strip on mobile, sidebar on desktop */}
+        <aside className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:pt-1">
+          <div className="mb-3 hidden items-baseline justify-between lg:flex">
+            <p className="text-sm font-medium text-zinc-300">Players</p>
+            <p className="text-xs tabular-nums text-zinc-600">
+              {players.length} of {MAX_PLAYERS}
+            </p>
+          </div>
+          <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6 lg:sticky lg:top-4 lg:mx-0 lg:grid lg:gap-0.5 lg:overflow-visible lg:px-0">
+            {players.map((p) => {
+              const isMe = p.user_id === myUserId
+              return (
+                <li
+                  key={p.id}
+                  className="flex shrink-0 items-center gap-2.5 rounded-full bg-zinc-900 py-1 pl-1 pr-3 ring-1 ring-inset ring-white/[0.06] lg:rounded-xl lg:bg-transparent lg:py-1.5 lg:pl-1.5 lg:ring-0"
+                >
+                  <Avatar name={p.nickname} size="sm" />
+                  <span
+                    className={`max-w-[9rem] truncate text-sm lg:max-w-none lg:flex-1 ${
+                      isMe ? 'font-semibold text-white' : 'font-medium text-zinc-300'
+                    }`}
+                  >
+                    {isMe ? 'You' : p.nickname}
+                  </span>
+                  {p.id === room.host_id && <Crown className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-label="Host" />}
+                  {p.score > 0 && <span className="text-xs tabular-nums text-zinc-500 lg:ml-auto">{p.score}pt</span>}
+                </li>
+              )
+            })}
+          </ul>
+          {room.phase === 'lobby' && (
+            <p className="mt-4 hidden text-xs leading-relaxed text-zinc-600 lg:block">
+              {spotsLeft > 0 ? `${spotsLeft} spots open. ` : 'Room is full. '}
+              The game starts with at least 3 players.
+            </p>
+          )}
+        </aside>
+
+        {/* Phase content. No overflow-hidden: the song dropdown must float above. */}
+        <main className="min-w-0 lg:col-start-1 lg:row-start-2">
+          <div className="stage rounded-3xl">
+            {room.phase === 'lobby' && <Lobby room={room} players={players} me={me} />}
+            {room.phase === 'prompts' && (
+              <div className="p-5 sm:p-8"><PromptEntry room={room} players={players} me={me} /></div>
+            )}
+            {room.phase === 'songs' && (
+              <div className="p-5 sm:p-8"><SongPick room={room} players={players} rounds={rounds} me={me} /></div>
+            )}
+            {room.phase === 'guessing' && (
+              <div className="p-5 sm:p-8"><Guessing room={room} players={players} rounds={rounds} votes={votes} me={me} /></div>
+            )}
+            {room.phase === 'results' && (
+              <div className="p-5 sm:p-8"><Results room={room} players={players} rounds={rounds} votes={votes} /></div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}

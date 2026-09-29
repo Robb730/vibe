@@ -1,0 +1,86 @@
+import { ArrowRight, Ban, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { supabase } from '../lib/supabase.js'
+import VibeLogo from './VibeLogo.jsx'
+
+// Gate for visitors opening an invite link who aren't players yet.
+// Mid-game arrivals are blocked (no spectator mode in MVP).
+export default function JoinGate({ room, onJoined }) {
+  const [nickname, setNickname] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  if (room.phase !== 'lobby') {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center bg-[#07070d] p-6">
+        <div className="glass-deep w-full max-w-sm rounded-3xl p-8 text-center">
+          <VibeLogo size="sm" />
+          <div className="mx-auto mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15">
+            <Ban className="h-6 w-6 text-red-300" />
+          </div>
+          <p className="font-display mt-4 text-xl font-black">Game already started</p>
+          <p className="mt-2 text-sm text-zinc-400">
+            Room <span className="font-mono font-bold text-zinc-200">{room.code}</span> is mid-game.
+            Ask the host for the next round!
+          </p>
+          <a href="/" className="btn-light mt-6 inline-block rounded-full px-6 py-2.5 text-sm font-bold">
+            Back home
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  async function join(e) {
+    e.preventDefault()
+    if (!nickname.trim()) return setError('Enter a nickname first.')
+    setBusy(true)
+    setError(null)
+    try {
+      const { error } = await supabase.rpc('join_room', {
+        p_code: room.code,
+        p_nickname: nickname.trim(),
+      })
+      if (error) throw error
+      onJoined?.()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="overlay-fade relative flex min-h-screen items-center justify-center bg-[#07070d] p-6">
+      <div className="modal-pop glass-deep w-full max-w-sm rounded-3xl p-8">
+        <div className="flex justify-center"><VibeLogo size="sm" /></div>
+        <p className="mt-4 text-center text-[11px] font-bold uppercase tracking-[0.3em] text-zinc-500">
+          You&apos;re invited to room
+        </p>
+        <p className="mt-1 text-center font-mono text-3xl font-black tracking-[0.3em]">{room.code}</p>
+        <form onSubmit={join} className="mt-6 grid gap-3">
+          <label className="grid gap-1">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Your nickname</span>
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              maxLength={20}
+              placeholder="e.g. Robb"
+              autoFocus
+              className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 outline-none focus:border-violet-500"
+            />
+          </label>
+          {error && <p className="rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{error}</p>}
+          <button disabled={busy} className="btn-primary flex items-center justify-center gap-2 rounded-full py-3 font-bold disabled:opacity-50">
+            {busy ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Joining<span className="reveal-dots" /></>
+            ) : (
+              <>Join room <ArrowRight className="h-4 w-4" /></>
+            )}
+          </button>
+        </form>
+        <p className="mt-4 text-center text-xs text-zinc-600">No signup · 3+ players to start</p>
+      </div>
+    </div>
+  )
+}
