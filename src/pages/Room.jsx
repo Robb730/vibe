@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, Crown, LogOut } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase, ensureAnonSession } from '../lib/supabase.js'
@@ -9,6 +9,7 @@ import Avatar from '../components/Avatar.jsx'
 import Background from '../components/Background.jsx'
 import AuthBanner from '../components/AuthBanner.jsx'
 import JoinGate from '../components/JoinGate.jsx'
+import ChatPanel from '../components/ChatPanel.jsx'
 import Toasts from '../components/Toasts.jsx'
 import Lobby from '../phases/Lobby.jsx'
 import PromptEntry from '../phases/PromptEntry.jsx'
@@ -31,7 +32,7 @@ const iconBtn =
 
 export default function Room() {
   const { code } = useParams()
-  const { room, players, rounds, votes, loading, error, live } = useRoom(code)
+  const { room, players, rounds, votes, messages, loading, error, live, roomDeleted, refreshMessages } = useRoom(code)
   const [myUserId, setMyUserId] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -91,12 +92,46 @@ export default function Room() {
     }
   }, [room, players, pushToast])
 
+  const [chatOpen, setChatOpen] = useState(false)
+  const [seenCount, setSeenCount] = useState(0)
+
+  // Track seen messages while chat is open; the badge counts the rest.
+  useEffect(() => {
+    if (chatOpen) setSeenCount(messages.length)
+  }, [chatOpen, messages])
+
+  const unread = chatOpen ? 0 : Math.max(0, messages.length - seenCount)
+
+  // Room vanished (last player left): brief notice, then home.
+  useEffect(() => {
+    if (!roomDeleted) return
+    const t = setTimeout(() => {
+      window.location.href = '/'
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [roomDeleted])
+
   if (loading || !authReady) {
     return (
       <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950">
         <Background />
         <div className="relative px-6">
           <VibeLoader message="Joining room" sub={code ? `Room ${String(code).toUpperCase()}` : 'Finding your vibe'} />
+        </div>
+      </div>
+    )
+  }
+
+  if (roomDeleted) {
+    return (
+      <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950 p-6 text-zinc-100">
+        <Background />
+        <div className="relative grid max-w-sm justify-items-center gap-5 text-center">
+          <VibeLogo size="sm" />
+          <div>
+            <p className="text-lg font-semibold">Room closed</p>
+            <p className="mt-1 text-sm text-zinc-500">Everyone left — taking you home…</p>
+          </div>
         </div>
       </div>
     )
@@ -154,6 +189,28 @@ export default function Room() {
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <VibeLogo size="sm" />
+            {room.phase !== 'lobby' && (
+              <button
+                onClick={() => {
+                  setSeenCount(messages.length)
+                  setChatOpen(true)
+                }}
+                aria-label={unread > 0 ? `Open chat, ${unread} unread messages` : 'Open chat'}
+                className={`relative ml-auto flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
+                  unread > 0
+                    ? 'bg-violet-600 text-white shadow-[0_0_28px_rgba(139,92,246,0.55)] hover:bg-violet-500'
+                    : 'bg-white/[0.07] text-zinc-100 ring-1 ring-inset ring-white/15 hover:bg-white/[0.12]'
+                }`}
+              >
+                <MessageCircle className="h-4 w-4 shrink-0" />
+                Chat
+                {unread > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[10px] font-black text-violet-700">
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={async () => {
                 try {
@@ -164,7 +221,7 @@ export default function Room() {
                 window.location.href = '/'
               }}
               aria-label="Leave room"
-              className={`${iconBtn} ml-auto px-3 text-sm`}
+              className={`${iconBtn} px-3 text-sm`}
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Leave</span>
@@ -258,6 +315,15 @@ export default function Room() {
         </main>
       </div>
       <Toasts toasts={toasts} />
+      {chatOpen && room.phase !== 'lobby' && (
+        <ChatPanel
+          room={room}
+          messages={messages}
+          myPlayerId={me?.id}
+          onClose={() => setChatOpen(false)}
+          onSent={refreshMessages}
+        />
+      )}
     </div>
   )
 }
