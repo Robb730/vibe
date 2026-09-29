@@ -34,17 +34,52 @@ export function useRoom(code) {
       if (!cancelled) setVotes((data ?? []).map(({ rounds: _r, ...rest }) => rest))
     }
 
-    async function load() {
-      setLoading(true)
-      setLive(false)
-      const { data: roomRow, error: roomErr } = await supabase
+    // PostgREST "single row" failure (zero rows, e.g. RLS filtered everything
+    // because the anon session wasn't ready yet) -> friendly message.
+    function friendlyRoomError(msg) {
+      if (/coerce|single JSON|PGRST116|0 rows/i.test(msg ?? '')) {
+        return 'Room not found — check the code and try again.'
+      }
+      return msg
+    }
+
+    async function fetchRoom() {
+      return supabase
         .from('rooms')
         .select('*')
         .eq('code', code.toUpperCase())
         .single()
+    }
+
+    async function load() {
+      setLoading(true)
+      setLive(false)
+      setError(null)
+
+      // Gate on the anon session: without it we query as role `anon`,
+      // RLS hides everything, and `.single()` throws the coercion error
+      // even for rooms that exist (classic cold invite-link open).
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (!data.session) await supabase.auth.signInAnonymously()
+      } catch {
+        /* fall through; the query error below will surface */
+      }
+      if (cancelled) return
+
+      let { data: roomRow, error: roomErr } = await fetchRoom()
+      if (roomErr && !cancelled && /coerce|single JSON|PGRST116/i.test(roomErr.message ?? '')) {
+        // Possibly raced the sign-in: retry once now that it settled.
+        try {
+          await supabase.auth.signInAnonymously()
+        } catch {
+          /* ignore */
+        }
+        if (!cancelled) ({ data: roomRow, error: roomErr } = await fetchRoom())
+      }
       if (cancelled) return
       if (roomErr) {
-        setError(roomErr.message)
+        setError(friendlyRoomError(roomErr.message))
         setLoading(false)
         return
       }

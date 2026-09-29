@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Copy, Crown, LogOut } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase, ensureAnonSession } from '../lib/supabase.js'
 import { useRoom } from '../hooks/useRoom.js'
@@ -9,6 +9,7 @@ import Avatar from '../components/Avatar.jsx'
 import Background from '../components/Background.jsx'
 import AuthBanner from '../components/AuthBanner.jsx'
 import JoinGate from '../components/JoinGate.jsx'
+import Toasts from '../components/Toasts.jsx'
 import Lobby from '../phases/Lobby.jsx'
 import PromptEntry from '../phases/PromptEntry.jsx'
 import SongPick from '../phases/SongPick.jsx'
@@ -45,6 +46,50 @@ export default function Room() {
       })
     })
   }, [])
+
+  const [toasts, setToasts] = useState([])
+  const toastId = useRef(0)
+  const prevRoster = useRef(null)
+  const prevHostId = useRef(null)
+
+  const pushToast = useCallback((kind, text) => {
+    const id = ++toastId.current
+    setToasts((ts) => [...ts.slice(-2), { id, kind, text }])
+    setTimeout(() => {
+      setToasts((ts) => ts.filter((t) => t.id !== id))
+    }, 3500)
+  }, [])
+
+  // Roster transitions -> join/leave toasts (initial load excluded).
+  useEffect(() => {
+    const cur = new Map(players.map((p) => [p.id, p.nickname]))
+    if (prevRoster.current === null) {
+      prevRoster.current = cur
+      return
+    }
+    const prev = prevRoster.current
+    prevRoster.current = cur
+    for (const [id, nick] of cur) {
+      if (!prev.has(id)) pushToast('join', `${nick} joined the room`)
+    }
+    for (const [id, nick] of prev) {
+      if (!cur.has(id)) pushToast('leave', `${nick} left the room`)
+    }
+  }, [players, pushToast])
+
+  // Crown passing -> host toast.
+  useEffect(() => {
+    if (!room) return
+    if (prevHostId.current === null) {
+      prevHostId.current = room.host_id
+      return
+    }
+    if (prevHostId.current !== room.host_id) {
+      prevHostId.current = room.host_id
+      const h = players.find((p) => p.id === room.host_id)
+      pushToast('host', `${h ? h.nickname : 'Someone'} is now host`)
+    }
+  }, [room, players, pushToast])
 
   if (loading || !authReady) {
     return (
@@ -111,7 +156,11 @@ export default function Room() {
             <VibeLogo size="sm" />
             <button
               onClick={async () => {
-                await supabase.auth.signOut()
+                try {
+                  await supabase.rpc('leave_room', { p_room_id: room.id })
+                } catch {
+                  /* going home anyway */
+                }
                 window.location.href = '/'
               }}
               aria-label="Leave room"
@@ -208,6 +257,7 @@ export default function Room() {
           </div>
         </main>
       </div>
+      <Toasts toasts={toasts} />
     </div>
   )
 }

@@ -167,6 +167,15 @@ input[type='range']::-moz-range-thumb {
   to { opacity: 1; transform: scale(1) rotate(0deg); }
 }
 
+/* Toasts: slide-up entrance. Exit is instant on timeout removal. */
+.toast-in {
+  animation: toast-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
 /* Synced 3-2-1 countdown entry into voting. */
 .countdown-pop {
   animation: countdown-pop 0.95s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
