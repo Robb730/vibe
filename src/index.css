@@ -300,12 +300,75 @@ input[type='range']::-moz-range-thumb {
    any element with border-radius). */
 .reveal-spotlight { will-change: opacity; }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+}
+
+section[id] {
+  scroll-margin-top: 96px;
+}
+
+/* ---------- Landing scroll reveal ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.3, 1);
+  will-change: opacity, transform;
+}
+.reveal-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Nav link underline sweep */
+.nav-link {
+  position: relative;
+  transition: color 0.2s ease;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  height: 1px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: linear-gradient(92deg, #a5b4fc, #e879f9);
+  transition: transform 0.3s ease;
+}
+.nav-link:hover::after {
+  transform: scaleX(1);
+}
+
+/* Feature card hover lift */
+.feature-card {
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.35s ease, background 0.35s ease;
+}
+.feature-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.055);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
   .reveal-spotlight,
   .reveal-disc-spin,
   .reveal-shimmer,
   .eq-bar,
   .animate-pulse-ring,
+  .animate-floaty,
   .reveal-progress { animation: none !important; }
   .reveal-progress { transform: none; }
 }

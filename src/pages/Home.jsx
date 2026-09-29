@@ -1,4 +1,4 @@
-import { ArrowRight, Link2, Loader2, Music, Pencil, Play, Trophy, Users, X } from 'lucide-react'
+import { ArrowRight, Clapperboard, Link2, Loader2, MessageCircle, Music, Pencil, Play, Radio, Trophy, Users, X, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, ensureAnonSession } from '../lib/supabase.js'
@@ -6,7 +6,17 @@ import VibeLogo from '../components/VibeLogo.jsx'
 import Avatar from '../components/Avatar.jsx'
 import Background from '../components/Background.jsx'
 import AuthBanner from '../components/AuthBanner.jsx'
+import CreditsModal from '../components/CreditsModal.jsx'
+import useReveal from '../hooks/useReveal.js'
 
+const FEATURES = [
+  { icon: Zap, title: 'No signup, just play', desc: 'Anonymous sessions. Create a room, share the code, and you’re in.', color: 'bg-violet-600' },
+  { icon: Music, title: '10-second clip picker', desc: 'Answer each prompt with a song + the exact 10s moment that sells it.', color: 'bg-sky-600' },
+  { icon: Users, title: 'Guess who picked it', desc: 'Listen, vote, and call out your friends’ taste in real time.', color: 'bg-emerald-600' },
+  { icon: Radio, title: 'Live rooms', desc: 'Realtime lobby, prompts, voting, and scores — everyone stays in sync.', color: 'bg-pink-600' },
+  { icon: MessageCircle, title: 'In-game chat', desc: 'React, tease, and argue about picks without leaving the room.', color: 'bg-orange-600' },
+  { icon: Clapperboard, title: 'Dramatic reveals', desc: 'Cinematic picker reveals, points, and a live leaderboard.', color: 'bg-amber-600' },
+]
 const STEPS = [
   { n: '01', icon: Link2, title: 'Create / Join', desc: 'Start a room or join with a code. No signup required.', color: 'bg-violet-600' },
   { n: '02', icon: Pencil, title: 'Write Prompts', desc: 'Everyone submits a prompt (anonymously).', color: 'bg-pink-600' },
@@ -19,10 +29,13 @@ export default function Home() {
   const [nickname, setNickname] = useState('')
   const [code, setCode] = useState('')
   const [mode, setMode] = useState(null) // 'create' | 'join' | null
+  const [showCredits, setShowCredits] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [authError, setAuthError] = useState(null)
   const navigate = useNavigate()
+
+  useReveal()
 
   useEffect(() => {
     ensureAnonSession().then(setAuthError)
@@ -72,9 +85,10 @@ export default function Home() {
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
         <VibeLogo />
         <nav className="hidden items-center gap-8 text-sm text-zinc-300 md:flex">
-          <a href="#how" className="hover:text-white">How It Works</a>
-          <a href="#how" className="hover:text-white">Features</a>
-          <a href="#how" className="hover:text-white">About</a>
+          <a href="#how" className="nav-link hover:text-white">How It Works</a>
+          <a href="#features" className="nav-link hover:text-white">Features</a>
+          <a href="#about" className="nav-link hover:text-white">About</a>
+          <button onClick={() => setShowCredits(true)} className="nav-link hover:text-white">Credits</button>
         </nav>
         <button
           onClick={() => setMode('create')}
@@ -185,16 +199,20 @@ export default function Home() {
       </main>
 
       {/* How it works */}
-      <section id="how" className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-20">
+      <section id="how" className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-24 px-6 pb-20">
         <div className="grid gap-6 md:grid-cols-[220px_1fr]">
-          <div>
+          <div className="reveal">
             <h2 className="font-display text-3xl font-black">How It Works</h2>
-            <p className="mt-2 text-sm text-zinc-400">7 simple steps. Endless fun.</p>
+            <p className="mt-2 text-sm text-zinc-400">5 simple steps. Endless fun.</p>
             <p className="handwritten mt-6 text-2xl text-zinc-500">∼∼</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {STEPS.map((s) => (
-              <div key={s.n} className="rounded-3xl border border-white/5 bg-white/[0.03] p-4">
+            {STEPS.map((s, i) => (
+              <div
+                key={s.n}
+                className="reveal feature-card rounded-3xl border border-white/5 bg-white/[0.03] p-4"
+                style={{ transitionDelay: `${i * 70}ms` }}
+              >
                 <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white ${s.color}`}><s.icon className="h-4 w-4" /></span>
                 <p className="mt-3 font-mono text-xs text-zinc-500">{s.n}</p>
                 <p className="mt-1 text-sm font-bold">{s.title}</p>
@@ -204,6 +222,107 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Features */}
+      <section id="features" className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-24 px-6 pb-20">
+        <div className="reveal max-w-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">Features</p>
+          <h2 className="font-display mt-2 text-3xl font-black">Built for <span className="text-gradient">game night</span></h2>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+            Everything you need for a fast, funny round with friends — nothing you don&apos;t.
+          </p>
+        </div>
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f, i) => (
+            <div
+              key={f.title}
+              className="reveal feature-card rounded-3xl border border-white/5 bg-white/[0.03] p-5"
+              style={{ transitionDelay: `${(i % 3) * 90}ms` }}
+            >
+              <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl text-white ${f.color}`}>
+                <f.icon className="h-5 w-5" />
+              </span>
+              <p className="mt-4 text-[15px] font-bold">{f.title}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* About */}
+      <section id="about" className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-24 px-6 pb-24">
+        <div className="reveal glass grid gap-8 rounded-[2rem] p-6 sm:p-10 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">About vibe</p>
+            <h2 className="font-display mt-2 text-3xl font-black leading-tight">
+              Same vibes.<br /><span className="text-gradient">Different minds.</span>
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-zinc-400">
+              vibe is a music + prompt guessing game for friends. Write a prompt, answer
+              every prompt with a song, then guess who picked what. It&apos;s built with
+              React, Supabase realtime rooms, and song previews from the Apple iTunes
+              Search API — no signup, just nicknames and good taste (or bad taste, which
+              is funnier).
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => setMode('create')}
+                className="btn-light flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold"
+              >
+                Create a Room <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setShowCredits(true)}
+                className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 hover:text-white"
+              >
+                Credits
+              </button>
+            </div>
+          </div>
+          <div className="grid gap-3">
+            <div className="rounded-3xl border border-white/10 bg-[#12121e]/90 p-5 text-center">
+              <VibeLogo size="sm" />
+              <p className="handwritten mt-3 text-2xl leading-snug text-zinc-300">
+                good music.<br />better people.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              {[
+                ['3+', 'players to start'],
+                ['10s', 'clip per song'],
+                ['30s', 'iTunes previews'],
+              ].map(([big, small]) => (
+                <div key={small} className="rounded-2xl border border-white/5 bg-white/[0.03] p-3">
+                  <p className="font-display text-xl font-black">{big}</p>
+                  <p className="mt-0.5 text-[11px] text-zinc-500">{small}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/5">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-8 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <VibeLogo size="sm" />
+            <span className="text-xs">© 2026 vibe by RJO</span>
+          </div>
+          <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-semibold">
+            <a href="#how" className="transition hover:text-white">How It Works</a>
+            <a href="#features" className="transition hover:text-white">Features</a>
+            <a href="#about" className="transition hover:text-white">About</a>
+            <button onClick={() => setShowCredits(true)} className="transition hover:text-white">Credits</button>
+          </nav>
+        </div>
+        <p className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-8 text-[11px] leading-relaxed text-zinc-600">
+          Music previews and artwork via the Apple iTunes Search API. All song rights belong to their respective artists and labels.
+        </p>
+      </footer>
+
+      {/* Credits modal */}
+      {showCredits && <CreditsModal onClose={() => setShowCredits(false)} />}
 
       {/* Modal */}
       {mode && (
