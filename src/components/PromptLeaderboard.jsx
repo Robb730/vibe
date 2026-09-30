@@ -2,6 +2,7 @@ import { ArrowRight, Crown, Hourglass, Trophy } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import Avatar from './Avatar.jsx'
+import Marquee from './Marquee.jsx'
 
 // Revealed leaderboard for one prompt group: who picked what, who guessed right.
 export default function PromptLeaderboard({ room, group, players, votes, isHost, isLast }) {
@@ -47,7 +48,9 @@ export default function PromptLeaderboard({ room, group, players, votes, isHost,
             <li key={r.id} className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.04] p-3">
               {r.artwork_url && <img src={r.artwork_url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-xl" />}
               <div className="min-w-0 flex-1 text-sm">
-                <p className="truncate font-bold">{r.title} <span className="font-normal text-zinc-500">— {r.artist}</span></p>
+                <Marquee label={`${r.title} — ${r.artist}`} className="font-bold">
+                  {r.title} <span className="font-normal text-zinc-500">— {r.artist}</span>
+                </Marquee>
                 <p className="truncate text-xs text-zinc-400">
                   Picked by <span className="font-bold text-zinc-200">{picker?.nickname ?? '?'}</span>
                   {' · '}
@@ -67,7 +70,7 @@ export default function PromptLeaderboard({ room, group, players, votes, isHost,
           <li key={player.id} className="flex items-center gap-3 rounded-2xl bg-black/30 px-4 py-2.5 text-sm">
             <span className="w-6 text-center font-black text-zinc-600">{i + 1}</span>
             <Avatar name={player.nickname} size="sm" />
-            <span className="font-semibold">{player.nickname}</span>
+            <span className="min-w-0 flex-1 truncate font-semibold">{player.nickname}</span>
             {i === 0 && correct > 0 && <Crown className="h-4 w-4 text-amber-300" />}
             <span className="ml-auto font-mono text-xs text-zinc-400">+{correct} this prompt · {player.score} total</span>
           </li>

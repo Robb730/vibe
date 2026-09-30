@@ -2,6 +2,7 @@ import { EyeOff, Lock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import Avatar from '../components/Avatar.jsx'
+import Marquee from '../components/Marquee.jsx'
 import RevealTakeover from '../components/RevealTakeover.jsx'
 
 const VOTE_WINDOW_MS = 30_000
@@ -222,8 +223,8 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
         <div className="mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-black/50 p-3 text-left">
           {song.artwork_url && <img src={song.artwork_url} alt="" className="h-12 w-12 shrink-0 rounded-xl" />}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">{song.title}</p>
-            <p className="truncate text-xs uppercase tracking-wider text-zinc-500">{song.artist}</p>
+            <Marquee label={song.title} className="text-sm font-bold">{song.title}</Marquee>
+            <Marquee label={song.artist} className="text-xs uppercase tracking-wider text-zinc-500">{song.artist}</Marquee>
           </div>
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10" aria-hidden>
             <span className="eq-bar h-5" style={{ animationDelay: '0s' }} />

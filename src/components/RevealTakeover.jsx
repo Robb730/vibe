@@ -1,6 +1,7 @@
 import { Crown, Disc3, SkipForward } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import Avatar from './Avatar.jsx'
+import Marquee from './Marquee.jsx'
 import PromptLeaderboard from './PromptLeaderboard.jsx'
 import { useCountUp } from '../hooks/useCountUp.js'
 
@@ -173,8 +174,8 @@ export default function RevealTakeover({ room, group, players, votes, isHost, is
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{r.title}</p>
-                    <p className="truncate text-xs text-zinc-500">{r.artist}</p>
+                    <Marquee label={r.title} className="text-sm font-semibold">{r.title}</Marquee>
+                    <Marquee label={r.artist} className="text-xs text-zinc-500">{r.artist}</Marquee>
                     {shown ? (
                       <p className="reveal-picker-in mt-1.5 flex items-center gap-1.5 text-xs">
                         <Avatar name={picker?.nickname ?? '?'} size="sm" />

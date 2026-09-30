@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle, X } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase, ensureAnonSession } from '../lib/supabase.js'
@@ -104,10 +104,12 @@ export default function Room() {
 
   const unread = chatOpen ? 0 : Math.max(0, messages.length - seenCount)
 
-  // Inline 3-2-1 when lobby flips to prompts (host + guests). Late joiners
-  // loading straight into prompts skip it (prevPhase starts null).
+  // Inline 3-2-1 when lobby flips to prompts and when songs flips to
+  // guessing (host + guests). Late joiners loading straight into the phase
+  // skip it (prevPhase starts null).
   // Songs-open chime fires exactly once per prompts -> songs entry.
   const [showStartCountdown, setShowStartCountdown] = useState(false)
+  const [showGuessingCountdown, setShowGuessingCountdown] = useState(false)
   const prevPhase = useRef(null)
   const songsChimePlayed = useRef(false)
   useEffect(() => {
@@ -115,6 +117,8 @@ export default function Room() {
     if (!phase) return
     if (prevPhase.current === 'lobby' && phase === 'prompts') setShowStartCountdown(true)
     else if (phase !== 'prompts') setShowStartCountdown(false)
+    if (prevPhase.current === 'songs' && phase === 'guessing') setShowGuessingCountdown(true)
+    else if (phase !== 'guessing') setShowGuessingCountdown(false)
     if (prevPhase.current === 'prompts' && phase === 'songs' && !songsChimePlayed.current) {
       songsChimePlayed.current = true
       playPhaseSound('songs')
@@ -201,7 +205,7 @@ export default function Room() {
   }
 
   return (
-    <div className="relative min-h-[100dvh] text-zinc-100">
+    <div className="relative min-h-[100dvh] overflow-x-clip text-zinc-100">
       <Background tone={room.phase} />
       <div className="relative mx-auto grid w-full max-w-7xl gap-6 px-4 pb-12 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:px-8 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-x-10 xl:px-10">
         {/* Header */}
@@ -312,7 +316,18 @@ export default function Room() {
               <div className="p-5 sm:p-8 xl:p-10"><SongPick room={room} players={players} rounds={rounds} me={me} /></div>
             )}
             {room.phase === 'guessing' && (
-              <div className="p-5 sm:p-8 xl:p-10"><Guessing room={room} players={players} rounds={rounds} votes={votes} me={me} /></div>
+              <div className="p-5 sm:p-8 xl:p-10">
+                {showGuessingCountdown ? (
+                  <StartCountdown
+                    title="Guessing starts"
+                    subtitle="Get ready — hear the clips, catch who picked what"
+                    chime="songs"
+                    onDone={() => setShowGuessingCountdown(false)}
+                  />
+                ) : (
+                  <Guessing room={room} players={players} rounds={rounds} votes={votes} me={me} />
+                )}
+              </div>
             )}
             {room.phase === 'results' && (
               <div className="p-5 sm:p-8 xl:p-10"><Results room={room} players={players} rounds={rounds} votes={votes} /></div>
@@ -335,11 +350,7 @@ export default function Room() {
           unread > 0 && !chatOpen ? 'animate-pulse-ring' : ''
         }`}
       >
-        {chatOpen ? (
-          <X className="h-5 w-5" />
-        ) : (
-          <MessageCircle className="h-5 w-5 shrink-0" />
-        )}
+        <MessageCircle className="h-5 w-5 shrink-0" />
         {unread > 0 && !chatOpen && (
           <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 text-[10px] font-black text-white shadow-lg">
             {unread > 9 ? '9+' : unread}

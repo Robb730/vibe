@@ -1,6 +1,7 @@
 import { Loader2, Music, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { searchSongs } from '../lib/itunes.js'
+import Marquee from './Marquee.jsx'
 
 // Live-as-you-type song search with a dropdown. Debounced; keyboard friendly.
 export default function SongSearch({ onSelect, autoFocus }) {
@@ -164,8 +165,8 @@ export default function SongSearch({ onSelect, autoFocus }) {
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-medium">{t.trackName}</span>
-                    <span className="block truncate text-sm text-zinc-500">{t.artistName}</span>
+                    <Marquee label={t.trackName} className="text-[15px] font-medium">{t.trackName}</Marquee>
+                    <Marquee label={t.artistName} className="text-sm text-zinc-500">{t.artistName}</Marquee>
                   </span>
                 </button>
               </li>

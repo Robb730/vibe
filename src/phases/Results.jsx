@@ -2,6 +2,7 @@ import { Crown, Medal, Music, Trophy } from 'lucide-react'
 import { useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
 import Avatar from '../components/Avatar.jsx'
+import Marquee from '../components/Marquee.jsx'
 
 export default function Results({ room, players, rounds, votes }) {
   const ranked = [...players].sort((a, b) => b.score - a.score)
@@ -64,11 +65,13 @@ export default function Results({ room, players, rounds, votes }) {
             return (
               <div key={r.id} className="flex gap-3 rounded-3xl border border-white/5 bg-white/[0.03] p-3">
                 {r.artwork_url
-                  ? <img src={r.artwork_url} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
-                  : <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-violet-600/20"><Music className="h-6 w-6 text-violet-300" /></span>}
-                <div className="min-w-0 text-sm">
-                  <p className="truncate font-bold">{r.title} <span className="font-normal text-zinc-500">— {r.artist}</span></p>
-                  <p className="truncate text-xs text-zinc-500">
+                  ? <img src={r.artwork_url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-2xl object-cover sm:h-14 sm:w-14" />
+                  : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-600/20 sm:h-14 sm:w-14"><Music className="h-6 w-6 text-violet-300" /></span>}
+                <div className="min-w-0 flex-1 text-sm">
+                  <Marquee label={`${r.title} — ${r.artist}`} className="font-bold">
+                    {r.title} <span className="font-normal text-zinc-500">— {r.artist}</span>
+                  </Marquee>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
                     Picked by {picker?.nickname ?? '?'} · {correct.length} correct
                     {correct.length > 0 && ` (${correct.map((v) => players.find((p) => p.id === v.voter_id)?.nickname ?? '?').join(', ')})`}
                   </p>

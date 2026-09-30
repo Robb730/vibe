@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { playCountdownSound } from '../lib/countdownSound.js'
+import { playPhaseSound } from '../lib/countdownSound.js'
 
-// Inline 3-2-1-Go shown inside the stage when lobby flips to prompts.
+// Inline 3-2-1-Go shown inside the stage on phase entries
+// (lobby -> prompts, songs -> guessing).
 // Timing is local per client (~1s realtime skew max); each step is 1s,
-// Go! holds ~450ms, then onDone swaps in the prompts UI.
+// Go! holds ~450ms, then onDone swaps in the phase UI.
+// chime: which sound plays on Go ('prompts' | 'songs').
 const STEPS = [3, 2, 1]
 const STEP_MS = 1000
 const GO_MS = 450
 
-export default function StartCountdown({ onDone }) {
+export default function StartCountdown({
+  onDone,
+  title = 'Game starting',
+  subtitle = 'Get ready — prompts are coming',
+  chime = 'prompts',
+}) {
   const reduced = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
     [],
@@ -24,8 +31,8 @@ export default function StartCountdown({ onDone }) {
   useEffect(() => {
     if (step < STEPS.length || goPlayed.current) return
     goPlayed.current = true
-    playCountdownSound('go')
-  }, [step])
+    playPhaseSound(chime)
+  }, [step, chime])
 
   useEffect(() => {
     if (reduced) {
@@ -55,9 +62,9 @@ export default function StartCountdown({ onDone }) {
     <div className="p-5 text-center sm:p-8" aria-live="assertive">
       <section className="mx-auto grid max-w-md justify-items-center gap-3 py-10 lg:max-w-xl">
         <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300">
-          Game starting
+          {title}
         </p>
-        <p className="text-sm text-zinc-400">Get ready — prompts are coming</p>
+        <p className="text-sm text-zinc-400">{subtitle}</p>
         <div
           key={go ? 'go' : n}
           className="countdown-pop font-display mt-2 flex h-28 w-28 items-center justify-center rounded-full bg-violet-600/20 text-5xl font-black text-white ring-2 ring-violet-400/50"

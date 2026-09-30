@@ -218,6 +218,16 @@ input[type='range']::-moz-range-thumb {
   to { opacity: 1; transform: none; }
 }
 
+/* ---------- Song-title marquee (ping-pong, only when overflowing) ---------- */
+.marquee-inner {
+  animation: marquee-pingpong linear infinite alternate;
+  animation-delay: 1s;
+}
+@keyframes marquee-pingpong {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-1 * var(--marquee-dist, 0px))); }
+}
+
 /* ---------- Floating chat open/close ---------- */
 .chat-panel {
   transform-origin: 50% 100%;
@@ -443,6 +453,7 @@ section[id] {
   .animate-floaty,
   .chat-enter,
   .chat-exit,
+  .marquee-inner,
   .overlay-fade,
   .overlay-exit,
   .reveal-progress { animation: none !important; }

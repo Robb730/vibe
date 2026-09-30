@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { trackToGameTrack } from '../lib/itunes.js'
 import ClipPicker from '../components/ClipPicker.jsx'
+import Marquee from '../components/Marquee.jsx'
 import SongSearch from '../components/SongSearch.jsx'
 
 const primaryBtn =
@@ -69,8 +70,8 @@ function SlotAnswer({ slot, onLocked }) {
           <div className="flex items-center gap-3 rounded-2xl bg-zinc-900 p-2.5 pr-2 ring-1 ring-inset ring-white/[0.06]">
             <img src={selected.artworkUrl60} alt="" className="h-14 w-14 shrink-0 rounded-xl bg-zinc-800" />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold">{selected.trackName}</p>
-              <p className="truncate text-sm text-zinc-500">{selected.artistName}</p>
+              <Marquee label={selected.trackName} className="font-semibold">{selected.trackName}</Marquee>
+              <Marquee label={selected.artistName} className="text-sm text-zinc-500">{selected.artistName}</Marquee>
             </div>
             <button
               onClick={() => setSelected(null)}
