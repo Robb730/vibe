@@ -17,14 +17,14 @@ export default function CreditsModal({ onClose }) {
 
   return (
     <div
-      className="overlay-fade fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center"
+      className="overlay-fade fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Credits"
     >
       <div
-        className="modal-pop glass-deep relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-3xl"
+        className="modal-pop glass-deep relative my-auto flex max-h-[85vh] max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-[#10101c]/90 px-6 py-4 backdrop-blur-xl">
@@ -38,7 +38,7 @@ export default function CreditsModal({ onClose }) {
           </button>
         </div>
 
-        <div className="credits-scroll -mx-1 overflow-y-auto px-6 py-5" style={{ maxHeight: 'calc(85vh - 73px)' }}>
+        <div className="credits-scroll -mx-1 max-h-[calc(85vh-73px)] max-h-[calc(85dvh-73px)] overflow-y-auto px-6 py-5">
           <div className="pointer-events-none absolute inset-x-6 top-[73px] z-10 h-6 bg-gradient-to-b from-[#10101c] to-transparent" aria-hidden />
           <h3 className="font-display text-2xl font-black">
             Credits <span className="text-gradient">.</span>

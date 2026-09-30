@@ -2,10 +2,10 @@ import { Dices, EyeOff, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 
-// One-time lifeline: offered 45s after the prompt screen mounts if the
+// One-time lifeline: offered 40s after the prompt screen mounts if the
 // player still hasn't typed anything. Consumed on generate (server-side),
 // one use per player per room — survives play-again via players.used_prompt_lifeline.
-const LIFELINE_DELAY_MS = 45_000
+const LIFELINE_DELAY_MS = 40_000
 
 export default function PromptEntry({ room, players, me }) {
   const [text, setText] = useState('')

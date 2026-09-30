@@ -326,8 +326,8 @@ export default function Home() {
 
       {/* Modal */}
       {mode && (
-        <div className="overlay-fade fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center" onClick={() => setMode(null)}>
-          <div key={mode} className="modal-pop glass-deep w-full max-w-sm rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="overlay-fade fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm" onClick={() => setMode(null)}>
+          <div key={mode} className="modal-pop glass-deep my-auto max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <VibeLogo size="sm" />
               <button onClick={() => setMode(null)} aria-label="Close" className="text-zinc-500 hover:text-white"><X className="h-5 w-5" /></button>

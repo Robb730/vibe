@@ -61,14 +61,14 @@ function SlotAnswer({ slot, onLocked }) {
   }
 
   return (
-    <div className="grid min-w-0 max-w-full gap-7 overflow-hidden">
+    <div className="grid min-w-0 max-w-full gap-7">
       <div className="min-w-0">
         <p className="font-display text-balance break-words text-2xl font-black leading-snug sm:text-3xl">“{stripQuotes(slot.prompt_text)}”</p>
         <p className="mt-3 text-sm text-zinc-500">Pick the song that fits. Nobody sees who wrote it.</p>
       </div>
 
       {!selected ? (
-        <div className="min-w-0 max-w-full overflow-hidden">
+        <div className="min-w-0 max-w-full">
           <SongSearch onSelect={setSelected} autoFocus />
         </div>
       ) : (
@@ -202,7 +202,7 @@ export default function SongPick({ room, players, rounds, me }) {
   const stepIdx = mySlots.indexOf(current)
 
   return (
-    <section className="mx-auto grid w-full min-w-0 max-w-lg gap-8 overflow-hidden lg:max-w-2xl">
+    <section className="mx-auto grid w-full min-w-0 max-w-lg gap-8 lg:max-w-2xl">
       {/* Progress */}
       <div className="grid min-w-0 gap-3">
         <p className="truncate text-sm font-medium tabular-nums text-zinc-400">

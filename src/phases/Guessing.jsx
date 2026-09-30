@@ -6,8 +6,9 @@ import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
 import RevealTakeover from '../components/RevealTakeover.jsx'
 
-const VOTE_WINDOW_MS = 30_000
+const VOTE_WINDOW_MS = 15_000
 const FAST_FORWARD_MS = 3_000
+const URGENT_MS = 7_000
 
 // Synced 3-2-1 entry. entryAt = first song deadline - 30s vote window.
 function CountdownEntry({ entryAt, promptText, promptOrd, promptCount }) {
@@ -73,18 +74,22 @@ function CountdownBar({ deadline }) {
   }
   const left = new Date(deadline).getTime() - now
   const frac = Math.max(0, Math.min(1, left / VOTE_WINDOW_MS))
-  const urgent = left < 10_000
+  const urgent = left < URGENT_MS
   return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between font-mono text-[11px]">
-        <span className={urgent ? 'font-bold text-red-300' : 'text-zinc-400'}>
+    <div className="reveal-row-in grid gap-1.5" aria-live="off">
+      <div className="flex items-baseline justify-between">
+        <span className={`text-xs ${urgent ? 'font-bold text-red-300' : 'font-medium text-zinc-400'}`}>
           {left <= 0 ? "Time's up!" : 'Voting closes in'}
         </span>
-        <span className={urgent ? 'font-bold text-red-300' : 'text-zinc-300'}>{fmt(left)}</span>
+        <span className={`font-mono text-sm font-bold tabular-nums ${urgent ? 'text-red-300' : 'text-zinc-100'}`}>{fmt(left)}</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+      <div className="h-2 overflow-hidden rounded-full bg-white/10 ring-1 ring-inset ring-white/5">
         <div
-          className={`h-full rounded-full transition-[width] duration-300 ${urgent ? 'bg-gradient-to-r from-red-500 to-amber-400' : 'bg-gradient-to-r from-violet-400 to-fuchsia-400'}`}
+          className={`h-full rounded-full transition-[width] duration-300 ${
+            urgent
+              ? 'bg-gradient-to-r from-red-500 to-amber-400 shadow-[0_0_12px_rgba(248,113,113,0.6)]'
+              : 'bg-gradient-to-r from-violet-400 to-fuchsia-400 shadow-[0_0_12px_rgba(167,139,250,0.55)]'
+          }`}
           style={{ width: `${frac * 100}%` }}
         />
       </div>
@@ -115,6 +120,12 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
   const songVotes = votes.filter((v) => v.round_id === song.id)
   const myVote = me ? songVotes.find((v) => v.voter_id === me.id) : null
   const locked = song.status !== 'open'
+  // Entrance choreography (song card + staggered voters). Off under
+  // reduced-motion; the CSS block covers the shared reveal classes too.
+  const animate = useMemo(
+    () => !(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+    []
+  )
 
   useEffect(() => {
     supabase.rpc('is_picker', { p_round_id: song.id }).then(({ data }) => {
@@ -241,19 +252,19 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
         </p>
       )}
 
-      <div className="rounded-3xl border border-violet-500/15 bg-gradient-to-b from-violet-950/50 to-black/40 p-4 text-center sm:p-5">
-        <div className="mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-black/50 p-3 text-left">
-          {song.artwork_url && <img src={song.artwork_url} alt="" className="h-12 w-12 shrink-0 rounded-xl" />}
+      <div className={`${animate ? 'reveal-row-in ' : ''}rounded-3xl border border-violet-500/20 bg-gradient-to-b from-violet-950/60 via-[#14101f]/80 to-black/40 p-4 text-center shadow-[0_16px_50px_rgba(109,91,255,0.18)] sm:p-5`}>
+        <div className="mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-black/50 p-3 text-left ring-1 ring-inset ring-white/[0.06]">
+          {song.artwork_url && <img src={song.artwork_url} alt="" draggable={false} className="h-14 w-14 shrink-0 rounded-2xl object-cover ring-1 ring-inset ring-white/10 sm:h-16 sm:w-16" />}
           <div className="min-w-0 flex-1">
-            <Marquee label={song.title} className="text-sm font-bold">{song.title}</Marquee>
-            <Marquee label={song.artist} className="text-xs uppercase tracking-wider text-zinc-500">{song.artist}</Marquee>
+            <Marquee label={song.title} className="text-[15px] font-bold leading-snug">{song.title}</Marquee>
+            <Marquee label={song.artist} className="mt-0.5 text-xs uppercase tracking-wider text-zinc-500">{song.artist}</Marquee>
           </div>
           {(!song.preview_url || unplayable) ? (
             <span className="shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-zinc-500 ring-1 ring-inset ring-white/10">
               No preview
             </span>
           ) : (
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10" aria-hidden>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-violet-500/30 to-fuchsia-500/20 ring-1 ring-inset ring-violet-400/40" aria-hidden>
               <span className="eq-bar h-5" style={{ animationDelay: '0s' }} />
             </span>
           )}
@@ -261,8 +272,10 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
       </div>
 
       {locked ? (
-        <div className="grid justify-items-center gap-2 rounded-3xl border border-emerald-500/20 bg-emerald-950/20 p-6 text-center">
-          <Lock className="h-6 w-6 text-emerald-300" />
+        <div className={`${animate ? 'reveal-row-in ' : ''}grid justify-items-center gap-2 rounded-3xl border border-emerald-500/25 bg-emerald-950/25 p-6 text-center shadow-[0_16px_50px_rgba(52,211,153,0.12)]`}>
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-400/15 ring-1 ring-inset ring-emerald-400/30">
+            <Lock className="h-5 w-5 text-emerald-300" />
+          </span>
           <p className="font-bold">
             {ffLeft !== null ? `Everyone's in! Next song in ${Math.ceil(ffLeft / 1000)}…` : 'Vote locked — picker stays hidden'}
           </p>
@@ -275,24 +288,30 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
           </div>
         </div>
       ) : isPicker ? (
-        <div className="grid justify-items-center gap-2 rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center">
-          <EyeOff className="h-6 w-6 text-zinc-400" />
+        <div className={`${animate ? 'reveal-row-in ' : ''}grid justify-items-center gap-2 rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center`}>
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/5 ring-1 ring-inset ring-white/10">
+            <EyeOff className="h-5 w-5 text-zinc-400" />
+          </span>
           <p className="font-bold">This is your song — sit tight</p>
-          <p className="text-sm text-zinc-400">{songVotes.length}/{Math.max(0, players.length - 1)} votes in. No voting for yourself.</p>
+          <p className="text-sm tabular-nums text-zinc-400">{songVotes.length}/{Math.max(0, players.length - 1)} votes in. No voting for yourself.</p>
         </div>
       ) : (
         <>
           <p className="text-center text-sm text-zinc-400">
             Who picked this? {myVote ? '· vote locked in (tap to change)' : `· ${songVotes.length} votes in`}
           </p>
-          <div className="flex flex-wrap items-start justify-center gap-3 rounded-3xl border border-white/5 bg-black/30 p-4 sm:gap-4 sm:p-5">
-            {players.filter((p) => p.id !== me?.id).map((p) => (
+          <div className="flex flex-wrap items-start justify-center gap-2.5 rounded-3xl border border-white/[0.07] bg-black/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:gap-3.5 sm:p-5">
+            {players.filter((p) => p.id !== me?.id).map((p, i) => (
               <button
                 key={p.id}
                 onClick={() => vote(p.id)}
                 disabled={busy}
-                className={`grid min-h-[76px] w-[72px] justify-items-center gap-1.5 rounded-2xl p-2 transition active:scale-95 ${
-                  (guess ?? myVote?.guessed_id) === p.id ? 'bg-violet-600/30 ring-2 ring-violet-400' : 'hover:bg-white/5'
+                aria-pressed={(guess ?? myVote?.guessed_id) === p.id}
+                style={animate ? { animationDelay: `${Math.min(i * 60, 420)}ms` } : undefined}
+                className={`${animate ? 'reveal-row-in ' : ''}grid min-h-[80px] w-[74px] justify-items-center gap-1.5 rounded-2xl p-2 ring-1 ring-inset transition active:scale-95 ${
+                  (guess ?? myVote?.guessed_id) === p.id
+                    ? 'scale-[1.04] bg-violet-600/30 shadow-[0_0_20px_rgba(139,92,246,0.45)] ring-2 ring-violet-400'
+                    : 'bg-white/[0.02] ring-white/5 hover:bg-white/[0.07] hover:ring-white/15'
                 } disabled:opacity-50`}
               >
                 <Avatar name={p.nickname} size="lg" />
