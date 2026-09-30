@@ -1,12 +1,27 @@
-import { Crown, Medal, Music, Trophy } from 'lucide-react'
-import { useMemo } from 'react'
+import { Crown, Hourglass, Medal, Music, Trophy } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
+import { useCountUp } from '../hooks/useCountUp.js'
 
-export default function Results({ room, players, rounds, votes, rankings = [] }) {
+function FinalScore({ score, start }) {
+  const shown = useCountUp(score, 1100, start)
+  return <span className="ml-auto shrink-0 font-mono text-sm tabular-nums">{shown} pts</span>
+}
+
+export default function Results({ room, players, rounds, votes, rankings = [], me }) {
   const ranked = [...players].sort((a, b) => b.score - a.score)
   const isRank = room.game_mode === 'rank'
+  const isHost = me && me.id === room.host_id
+  const [busy, setBusy] = useState(false)
+  const [restartError, setRestartError] = useState(null)
+  // Same reveal language as the per-prompt takeovers, as a one-shot
+  // entrance (staggered rows + eased count-up). Reduced-motion renders final.
+  const animate = useMemo(
+    () => !(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+    []
+  )
 
   const groups = useMemo(() => {
     const map = new Map()
@@ -25,7 +40,11 @@ export default function Results({ room, players, rounds, votes, rankings = [] })
   }, [rounds])
 
   async function playAgain() {
-    await supabase.rpc('restart_game', { p_room_id: room.id })
+    setBusy(true)
+    setRestartError(null)
+    const { error } = await supabase.rpc('restart_game', { p_room_id: room.id })
+    if (error) setRestartError(error.message)
+    setBusy(false)
   }
 
   return (
@@ -41,22 +60,27 @@ export default function Results({ room, players, rounds, votes, rankings = [] })
         {ranked.map((p, i) => (
           <li
             key={p.id}
-            className={`flex items-center gap-3 rounded-2xl border p-3 ${
+            className={`${animate ? 'reveal-row-in ' : ''}flex items-center gap-3 rounded-2xl border p-3 ${
               i === 0 ? 'border-amber-400/30 bg-amber-400/10' : 'border-white/5 bg-white/[0.04]'
             }`}
+            style={animate ? { animationDelay: `${Math.min(i * 120, 600)}ms` } : undefined}
           >
             <span className="flex w-8 justify-center text-zinc-500">
-              {i === 0 ? <Crown className="h-5 w-5 text-amber-300" /> : i === 1 || i === 2 ? <Medal className="h-5 w-5" /> : <span className="font-black">{i + 1}</span>}
+              {i === 0 ? <Crown className={`${animate ? 'reveal-crown-pop ' : ''}h-5 w-5 text-amber-300`} /> : i === 1 || i === 2 ? <Medal className="h-5 w-5" /> : <span className="font-black">{i + 1}</span>}
             </span>
             <Avatar name={p.nickname} size="sm" />
             <span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span>
-            <span className="ml-auto shrink-0 font-mono text-sm">{p.score} pts</span>
+            <FinalScore score={p.score} start={animate} />
           </li>
         ))}
       </ol>
 
-      {groups.map((g) => (
-        <div key={g.ord} className="grid gap-2">
+      {groups.map((g, gi) => (
+        <div
+          key={g.ord}
+          className={`${animate ? 'reveal-row-in ' : ''}grid gap-2`}
+          style={animate ? { animationDelay: `${Math.min(300 + gi * 150, 900)}ms` } : undefined}
+        >
           <p className="mt-2 px-1 text-xs font-bold uppercase tracking-[0.25em] text-violet-300">
             Prompt {g.ord + 1} · <span className="normal-case text-zinc-200">“{g.prompt}”</span>
           </p>
@@ -150,9 +174,20 @@ export default function Results({ room, players, rounds, votes, rankings = [] })
         </div>
       ))}
 
-      <button onClick={playAgain} className="btn-primary rounded-full py-3.5 font-bold">
-        Play again (same room) →
-      </button>
+      {isHost ? (
+        <>
+          <button onClick={playAgain} disabled={busy} className="btn-primary rounded-full py-3.5 font-bold disabled:opacity-50">
+            {busy ? 'Restarting…' : 'Play again (same room) →'}
+          </button>
+          {restartError && <p className="rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{restartError}</p>}
+        </>
+      ) : (
+        <div className="glass grid justify-items-center gap-1.5 rounded-3xl p-4 text-center">
+          <Hourglass className="animate-hourglass h-5 w-5 text-amber-300" />
+          <p className="text-sm font-bold">Waiting for the host…</p>
+          <p className="text-xs text-zinc-500">Play again returns to the lobby — the host starts the next game.</p>
+        </div>
+      )}
     </section>
   )
 }

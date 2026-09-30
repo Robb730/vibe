@@ -340,7 +340,7 @@ export default function Room() {
               </div>
             )}
             {room.phase === 'results' && (
-              <div className="p-5 sm:p-8 xl:p-10"><Results room={room} players={players} rounds={rounds} votes={votes} rankings={rankings} /></div>
+              <div className="p-5 sm:p-8 xl:p-10"><Results room={room} players={players} rounds={rounds} votes={votes} rankings={rankings} me={me} /></div>
             )}
           </div>
         </main>

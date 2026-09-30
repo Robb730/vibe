@@ -1,8 +1,8 @@
-import { ArrowRight, ChevronDown, ChevronUp, Crown, GripVertical, Hourglass, Loader2, Play } from 'lucide-react'
+import { ChevronDown, ChevronUp, GripVertical, Loader2, Play, VolumeX } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
+import RankRevealTakeover from '../components/RankRevealTakeover.jsx'
 
 const RANK_WINDOW_MS = 60_000
 
@@ -53,156 +53,27 @@ function useNow(step = 250) {
   return now
 }
 
-// ---------- rank reveal (Borda pts + 1sts) ----------
-function RankReveal({ room, group, players, rankings, isHost, isLast }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const N = group.length
-  const groupIds = useMemo(() => new Set(group.map((r) => r.id)), [group])
-
-  const { board, songStats } = useMemo(() => {
-    const pts = new Map(players.map((p) => [p.id, { player: p, points: 0, firsts: 0 }]))
-    const stats = new Map(group.map((r) => [r.id, { points: 0, firsts: 0, top: [] }]))
-    for (const rk of rankings) {
-      if (!groupIds.has(rk.round_id)) continue
-      const round = group.find((r) => r.id === rk.round_id)
-      const pickerId = round?.picker_id
-      if (!pickerId) continue
-      const gain = N - rk.rank
-      const cell = pts.get(pickerId)
-      if (cell) {
-        cell.points += gain
-        if (rk.rank === 1) cell.firsts += 1
-      }
-      const st = stats.get(rk.round_id)
-      if (st) {
-        st.points += gain
-        if (rk.rank === 1) {
-          st.firsts += 1
-          const ranker = players.find((p) => p.id === rk.ranker_id)
-          if (ranker) st.top.push(ranker.nickname)
-        }
-      }
-    }
-    const board = [...pts.values()].sort(
-      (a, b) => b.points - a.points || b.firsts - a.firsts || b.player.score - a.player.score
-    )
-    return { board, songStats: stats }
-  }, [players, rankings, group, groupIds, N])
-
-  async function next() {
-    setBusy(true)
-    setError(null)
-    const { error } = await supabase.rpc('next_prompt', { p_room_id: room.id })
-    if (error) setError(error.message)
-    setBusy(false)
-  }
-
-  return (
-    <div className="grid w-full min-w-0 gap-4 overflow-hidden">
-      <div className="grid min-w-0 justify-items-center gap-1.5 px-1 text-center">
-        <h3 className="font-display text-balance text-xl font-black leading-tight sm:text-2xl">
-          Prompt {room.current_prompt + 1} results
-        </h3>
-        <p className="max-w-full break-words text-balance text-sm text-zinc-400">“{group[0]?.prompt_text}”</p>
-        <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-violet-300">Ranked · Borda scoring</p>
-      </div>
-
-      <ul className="grid min-w-0 gap-2.5">
-        {group.map((r) => {
-          const picker = players.find((p) => p.id === r.picker_id)
-          const st = songStats.get(r.id) ?? { points: 0, firsts: 0, top: [] }
-          return (
-            <li
-              key={r.id}
-              className="flex min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.04] p-3 sm:items-center sm:p-4"
-            >
-              {r.artwork_url ? (
-                <img src={r.artwork_url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-xl object-cover sm:h-14 sm:w-14" />
-              ) : (
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-600/20 sm:h-14 sm:w-14">
-                  <Play className="h-5 w-5 text-violet-300" />
-                </span>
-              )}
-              <div className="grid min-w-0 flex-1 gap-1.5">
-                <Marquee label={`${r.title} — ${r.artist}`} className="text-sm font-bold leading-snug">
-                  {r.title} <span className="font-normal text-zinc-500">— {r.artist}</span>
-                </Marquee>
-                <p className="text-xs text-zinc-500">
-                  Picked by <span className="font-bold text-zinc-100">{picker?.nickname ?? '?'}</span>
-                  {' · '}
-                  <span className="font-bold text-emerald-300">+{st.points} pts</span>
-                  {' · '}
-                  <span className="text-zinc-400">{st.firsts} 1st{st.firsts === 1 ? '' : 's'}</span>
-                </p>
-                {st.top.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-amber-300/80">1st from</span>
-                    {st.top.map((name) => (
-                      <span
-                        key={name}
-                        className="inline-flex max-w-[10rem] items-center truncate rounded-full bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-200 ring-1 ring-inset ring-amber-400/30"
-                        title={name}
-                      >
-                        <span className="truncate">{name}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      <ol className="grid min-w-0 gap-1.5">
-        {board.map(({ player, points, firsts }, i) => (
-          <li key={player.id} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-black/30 px-3 py-2.5 text-sm sm:px-4">
-            <span className="w-5 shrink-0 text-center font-black tabular-nums text-zinc-600">{i + 1}</span>
-            <Avatar name={player.nickname} size="sm" />
-            <span className="min-w-0 flex-1 basis-24 truncate font-semibold">{player.nickname}</span>
-            {i === 0 && points > 0 && <Crown className="h-4 w-4 shrink-0 text-amber-300" />}
-            <span className="ml-auto flex shrink-0 items-baseline gap-1.5 font-mono text-xs">
-              <span className="font-bold tabular-nums text-emerald-300">+{points}</span>
-              <span className="text-zinc-500">{firsts} 1st{firsts === 1 ? '' : 's'}</span>
-              <span className="text-zinc-600">·</span>
-              <span className="tabular-nums text-zinc-400">{player.score} total</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      {isHost ? (
-        <>
-          <button onClick={next} disabled={busy} className="btn-primary flex items-center justify-center gap-2 rounded-full py-3.5 font-bold disabled:opacity-50">
-            {busy ? 'Moving…' : isLast ? 'See final results' : 'Next prompt'} <ArrowRight className="h-4 w-4" />
-          </button>
-          {error && <p className="rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{error}</p>}
-        </>
-      ) : (
-        <div className="glass grid justify-items-center gap-1.5 rounded-3xl p-4 text-center">
-          <Hourglass className="animate-hourglass h-5 w-5 text-amber-300" />
-          <p className="text-sm font-bold">Waiting for the host…</p>
-          <p className="text-xs text-zinc-500">The host moves us to the next prompt.</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ---------- main phase ----------
 export default function Ranking({ room, players, rounds, rankings, me }) {
   const promptOrd = room.current_prompt ?? 0
   const now = useNow(250)
   const audioRef = useRef(null)
   const pauseTimer = useRef(null)
+  const clipGen = useRef(0)
   const finalizedRef = useRef(false)
-  const dragIdx = useRef(null)
+  // Active grip-drag session: pointer capture retargets every move/up event
+  // to the grip itself, so ALL drag logic must live on the grip element.
+  const dragSession = useRef(null)
 
   const [mineIds, setMineIds] = useState(() => new Set(loadMine(room.id)))
   const [order, setOrder] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [draggingId, setDraggingId] = useState(null)
+  // Phone audio: iOS blocks play() without a prior user gesture, and seeks
+  // before metadata fail on cellular. Track both so the UI can recover.
+  const [audioBlocked, setAudioBlocked] = useState(false)
+  const [badClips, setBadClips] = useState(() => new Set())
 
   const group = useMemo(
     () => rounds.filter((r) => (r.prompt_ord ?? 0) === promptOrd).sort((a, b) => a.order_idx - b.order_idx),
@@ -267,28 +138,116 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
   const rankDeadline = maxDeadline > 0 ? maxDeadline + RANK_WINDOW_MS : 0
   const rankLeft = rankDeadline > 0 ? rankDeadline - now : null
 
+  // First user gesture unlocks programmatic audio (iOS autoplay policy).
+  // After any real tap, timer-driven plays are allowed for the session.
+  useEffect(() => {
+    function unlock() {
+      const el = audioRef.current
+      if (el) {
+        try {
+          const pr = el.play()
+          if (pr && typeof pr.catch === 'function') {
+            pr.then(() => el.pause()).catch(() => {})
+          } else {
+            el.pause()
+          }
+        } catch {
+          /* element may not be ready: the blocked banner covers this path */
+        }
+      }
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('touchend', unlock)
+    }
+    window.addEventListener('pointerdown', unlock)
+    window.addEventListener('touchend', unlock)
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('touchend', unlock)
+    }
+  }, [])
+
+  // Play one 10s clip from clip_start. Seeks only after metadata is ready
+  // (synchronous seeks fail on cellular Safari); surfaces blocked vs broken
+  // so the UI can show "tap to enable" vs "no preview" instead of silence.
+  function playClip(song) {
+    const el = audioRef.current
+    if (!el || !song?.preview_url) return false
+    const gen = ++clipGen.current
+    const startAt = song.clip_start ?? 0
+    clearTimeout(pauseTimer.current)
+
+    function begin() {
+      if (clipGen.current !== gen) return
+      try {
+        el.currentTime = startAt
+      } catch {
+        /* seek failed: play from 0 rather than staying silent */
+      }
+      try {
+        const pr = el.play()
+        if (pr && typeof pr.catch === 'function') {
+          pr.catch((err) => {
+            if (clipGen.current !== gen) return
+            if (err?.name === 'NotAllowedError') setAudioBlocked(true)
+            else setBadClips((prev) => (prev.has(song.id) ? prev : new Set(prev).add(song.id)))
+          })
+        }
+      } catch {
+        setAudioBlocked(true)
+      }
+      clearTimeout(pauseTimer.current)
+      pauseTimer.current = setTimeout(() => {
+        if (clipGen.current === gen) el.pause()
+      }, 10_000)
+    }
+
+    function onError() {
+      if (clipGen.current !== gen) return
+      setBadClips((prev) => (prev.has(song.id) ? prev : new Set(prev).add(song.id)))
+    }
+
+    // Same URL already loaded: seek + play immediately (keeps iOS gesture
+    // token when called from a tap handler).
+    const srcUrl = new URL(song.preview_url, window.location.href).href
+    if (el.src === srcUrl && el.readyState >= 1) {
+      begin()
+      return true
+    }
+    el.src = song.preview_url
+    el.load()
+    const metaHandler = () => {
+      clearTimeout(metaTimer)
+      el.removeEventListener('error', onError)
+      begin()
+    }
+    const metaTimer = setTimeout(() => {
+      el.removeEventListener('loadedmetadata', metaHandler)
+      el.removeEventListener('error', onError)
+      begin()
+    }, 3000)
+    el.addEventListener('loadedmetadata', metaHandler, { once: true })
+    el.addEventListener('error', onError)
+    return true
+  }
+
+  function stopClip() {
+    clipGen.current++
+    clearTimeout(pauseTimer.current)
+    audioRef.current?.pause()
+  }
+
   // Synced clip playback during listening.
   useEffect(() => {
     const el = audioRef.current
     if (!el || !listening) {
-      el?.pause()
+      if (!listening) stopClip()
       return undefined
     }
     const song = group[Math.max(0, listenIdx)]
-    if (!song?.preview_url) return undefined
-    el.src = song.preview_url
-    el.currentTime = song.clip_start ?? 0
-    try {
-      const pr = el.play()
-      if (pr && typeof pr.catch === 'function') pr.catch(() => {})
-    } catch {
-      /* autoplay blocked: stay silent */
-    }
-    clearTimeout(pauseTimer.current)
-    pauseTimer.current = setTimeout(() => el.pause(), 10_000)
+    if (!song?.preview_url || badClips.has(song.id)) return undefined
+    playClip(song)
     return () => {
-      clearTimeout(pauseTimer.current)
-      el.pause()
+      stopClip()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listening, listenIdx, promptOrd])
@@ -316,26 +275,42 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
     })
   }
 
-  function onGripDown(e, idx) {
-    if (e.button !== undefined && e.button !== 0) return
-    dragIdx.current = idx
-    e.currentTarget.setPointerCapture?.(e.pointerId)
+  function onGripDown(e, id, idx) {
+    if (e.isPrimary === false) return
+    if (e.pointerType === 'mouse' && e.button !== undefined && e.button !== 0) return
+    const row = e.currentTarget.closest('li')
+    // Row height + list gap (gap-2 = 8px): converts pointer travel to rows.
+    const rowH = (row?.offsetHeight ?? 68) + 8
+    dragSession.current = { id, index: idx, startY: e.clientY, rowH }
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId)
+    } catch {
+      /* older browsers: moves still fire on the grip while over it */
+    }
+    setDraggingId(id)
+    e.preventDefault()
   }
 
-  function onGripMove(e, idx) {
-    if (dragIdx.current === null || dragIdx.current === idx) return
-    const from = dragIdx.current
+  function onGripMove(e) {
+    const s = dragSession.current
+    if (!s || e.isPrimary === false) return
+    const target = Math.max(0, Math.min(order.length - 1, s.index + Math.round((e.clientY - s.startY) / s.rowH)))
+    if (target === s.index) return
+    const from = s.index
+    s.index = target
     setOrder((prev) => {
+      if (prev[from] !== s.id) return prev
       const next = [...prev]
       const [item] = next.splice(from, 1)
-      next.splice(idx, 0, item)
+      next.splice(target, 0, item)
       return next
     })
-    dragIdx.current = idx
   }
 
-  function onGripUp() {
-    dragIdx.current = null
+  function onGripUp(e) {
+    if (e && e.isPrimary === false) return
+    dragSession.current = null
+    setDraggingId(null)
   }
 
   async function submit() {
@@ -351,12 +326,20 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
     setBusy(false)
   }
 
+  // "Tap to enable sound": runs inside the tap gesture. The unlock listener
+  // normally covers this, but if a play was ever rejected we retry audibly.
+  function enableSound(currentOrder) {
+    setAudioBlocked(false)
+    const target = listening ? group[Math.max(0, listenIdx)] : (currentOrder ?? [])[0]
+    if (target?.preview_url) playClip(target)
+  }
+
   if (group.length === 0) return <p className="py-10 text-center text-sm text-zinc-400">Loading prompt…</p>
 
   if (revealed) {
     return (
       <section className="mx-auto grid w-full min-w-0 max-w-lg gap-4 overflow-hidden lg:max-w-xl">
-        <RankReveal
+        <RankRevealTakeover
           room={room}
           group={group}
           players={players}
@@ -379,6 +362,15 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
         4 · Ranking — prompt {promptOrd + 1} of {promptCount}
       </p>
       <h3 className="font-display px-2 text-center text-xl font-black text-balance sm:text-2xl">“{group[0]?.prompt_text}”</h3>
+
+      {audioBlocked && (
+        <button
+          onClick={() => enableSound(orderedSongs)}
+          className="mx-auto flex items-center gap-2 rounded-full bg-amber-400/15 px-4 py-2.5 text-sm font-bold text-amber-200 ring-1 ring-inset ring-amber-400/30 transition active:scale-95"
+        >
+          <VolumeX className="h-4 w-4" /> Sound is blocked — tap to enable
+        </button>
+      )}
 
       {listening ? (
         <div className="grid gap-4">
@@ -412,8 +404,16 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
                     <Marquee label={r.title} className="text-sm font-bold">{r.title}</Marquee>
                     <Marquee label={r.artist} className="text-xs text-zinc-500">{r.artist}</Marquee>
                   </div>
-                  {active && <span className="eq-bar h-5 shrink-0" aria-hidden />}
-                  {done && <span className="shrink-0 font-mono text-[11px] text-emerald-300">heard</span>}
+                  {(!r.preview_url || badClips.has(r.id)) ? (
+                    <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-zinc-500 ring-1 ring-inset ring-white/10">
+                      No preview
+                    </span>
+                  ) : (
+                    <>
+                      {active && <span className="eq-bar h-5 shrink-0" aria-hidden />}
+                      {done && <span className="shrink-0 font-mono text-[11px] text-emerald-300">heard</span>}
+                    </>
+                  )}
                 </li>
               )
             })}
@@ -444,43 +444,43 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
           {others.length === 0 ? (
             <p className="py-6 text-center text-sm text-zinc-400">Finding your ballot…</p>
           ) : (
-            <ol className="grid min-w-0 gap-2">
+            <ol className={`grid min-w-0 gap-2 ${draggingId ? 'select-none' : ''}`}>
               {orderedSongs.map((r, i) => (
                 <li
                   key={r.id}
-                  onPointerMove={(e) => onGripMove(e, i)}
-                  onPointerUp={onGripUp}
-                  onPointerCancel={onGripUp}
-                  className="flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.04] p-2.5 sm:gap-3 sm:p-3"
+                  className={`flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border p-2.5 transition-colors sm:gap-3 sm:p-3 ${
+                    draggingId === r.id
+                      ? 'border-violet-400/60 bg-violet-600/15 ring-1 ring-inset ring-violet-400/40'
+                      : 'border-white/5 bg-white/[0.04]'
+                  }`}
                 >
                   <span className="w-6 shrink-0 text-center font-mono text-xs font-bold tabular-nums text-zinc-400">{i + 1}</span>
                   {r.artwork_url && (
-                    <img src={r.artwork_url} alt="" loading="lazy" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
+                    <img src={r.artwork_url} alt="" draggable={false} loading="lazy" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
                   )}
                   <div className="min-w-0 flex-1">
                     <Marquee label={r.title} className="text-sm font-bold leading-snug">{r.title}</Marquee>
                     <Marquee label={r.artist} className="text-xs text-zinc-500">{r.artist}</Marquee>
                   </div>
-                  <button
-                    onClick={() => {
-                      const el = audioRef.current
-                      if (!el || !r.preview_url) return
-                      el.src = r.preview_url
-                      el.currentTime = r.clip_start ?? 0
-                      try {
-                        const pr = el.play()
-                        if (pr && typeof pr.catch === 'function') pr.catch(() => {})
-                      } catch {
-                        /* ignore */
-                      }
-                      clearTimeout(pauseTimer.current)
-                      pauseTimer.current = setTimeout(() => el.pause(), 10_000)
-                    }}
-                    aria-label={`Replay ${r.title}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition active:scale-95 lg:hover:bg-white/15"
-                  >
-                    <Play className="h-4 w-4" />
-                  </button>
+                  {(!r.preview_url || badClips.has(r.id)) ? (
+                    <span
+                      title="No preview available for this song"
+                      className="flex h-9 shrink-0 items-center rounded-full bg-white/5 px-2.5 text-[11px] font-semibold text-zinc-500 ring-1 ring-inset ring-white/10"
+                    >
+                      No preview
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setAudioBlocked(false)
+                        playClip(r)
+                      }}
+                      aria-label={`Replay ${r.title}`}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition active:scale-95 lg:hover:bg-white/15"
+                    >
+                      <Play className="h-4 w-4" />
+                    </button>
+                  )}
                   <span className="grid shrink-0 gap-0.5">
                     <button
                       onClick={() => move(r.id, -1)}
@@ -503,12 +503,17 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
                     role="button"
                     tabIndex={0}
                     aria-label={`Drag to reorder ${r.title}`}
-                    onPointerDown={(e) => onGripDown(e, i)}
+                    onPointerDown={(e) => onGripDown(e, r.id, i)}
+                    onPointerMove={onGripMove}
+                    onPointerUp={onGripUp}
+                    onPointerCancel={onGripUp}
                     onKeyDown={(e) => {
                       if (e.key === 'ArrowUp') move(r.id, -1)
                       if (e.key === 'ArrowDown') move(r.id, 1)
                     }}
-                    className="flex h-10 w-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-zinc-500 transition active:cursor-grabbing active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200"
+                    className={`flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg transition active:cursor-grabbing active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200 ${
+                      draggingId === r.id ? 'bg-violet-600/25 text-violet-100' : 'text-zinc-500'
+                    }`}
                     style={{ touchAction: 'none' }}
                   >
                     <GripVertical className="h-5 w-5" />
