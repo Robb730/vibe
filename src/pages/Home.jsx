@@ -92,7 +92,7 @@ export default function Home() {
         </nav>
         <button
           onClick={() => setMode('create')}
-          className="btn-light flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-bold"
+          className="btn-light btn-landing flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-bold"
         >
           Play Now <ArrowRight className="h-4 w-4" />
         </button>
@@ -121,7 +121,7 @@ export default function Home() {
           <div className="mt-8 grid gap-3">
             <button
               onClick={() => setMode('create')}
-              className="btn-light flex w-fit items-center gap-3 rounded-full px-7 py-3.5 font-bold"
+              className="btn-light btn-landing flex w-fit items-center gap-3 rounded-full px-7 py-3.5 font-bold"
             >
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/80 text-white"><Play className="ml-0.5 h-3 w-3" /></span>
               Create a Room <ArrowRight className="h-4 w-4" />
@@ -267,7 +267,7 @@ export default function Home() {
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => setMode('create')}
-                className="btn-light flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold"
+                className="btn-light btn-landing flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold"
               >
                 Create a Room <ArrowRight className="h-4 w-4" />
               </button>
