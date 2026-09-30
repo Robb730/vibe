@@ -1,7 +1,7 @@
 import { EyeOff, Lock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { playClip, stopClip, unlockAudio, useAudioUnlock } from '../lib/audio.js'
+import { playClip, stopClip } from '../lib/audio.js'
 import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
 import RevealTakeover from '../components/RevealTakeover.jsx'
@@ -106,16 +106,10 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
   const [ffLeft, setFfLeft] = useState(null) // fast-forward 3s countdown
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [unplayable, setUnplayable] = useState(false)
-  const audioRef = useRef(null)
+  
   const advancedRef = useRef(false)
   const stampedRef = useRef(false)
   const ffTimer = useRef(null)
-  const songRef = useRef(song)
-  songRef.current = song
-
-  // First gesture unlocks audio (iOS policy); pre-bind this song's preview
-  // so the unlock counts as genuine playback.
-  useAudioUnlock(audioRef, () => songRef.current?.preview_url ?? null)
 
   const songVotes = votes.filter((v) => v.round_id === song.id)
   const myVote = me ? songVotes.find((v) => v.voter_id === me.id) : null
@@ -133,39 +127,17 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
     })
   }, [song.id])
 
-  // Auto-play the clip when this song goes live. While blocked, ANY
-  // natural tap retries in-gesture — no sound button anywhere.
   useEffect(() => {
-    const el = audioRef.current
     setAudioBlocked(false)
     setUnplayable(false)
-    playClip(el, song, {
+    playClip(song, {
       onBlocked: () => setAudioBlocked(true),
       onBroken: () => setUnplayable(true),
+      onPlaying: () => setAudioBlocked(false),
     })
-    return () => {
-      stopClip(el)
-    }
+    return () => stopClip()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song.id, song.clip_start])
-
-  useEffect(() => {
-    if (!audioBlocked) return
-    function retry() {
-      const s = songRef.current
-      if (!s?.preview_url) return
-      // Unlock attempt runs synchronously in the gesture, then the shared
-      // helper fast-paths the play when the clip is already loaded.
-      unlockAudio(audioRef.current)
-      setAudioBlocked(false)
-      playClip(audioRef.current, s, {
-        onBlocked: () => setAudioBlocked(true),
-        onBroken: () => setUnplayable(true),
-      })
-    }
-    window.addEventListener('pointerdown', retry)
-    return () => window.removeEventListener('pointerdown', retry)
-  }, [audioBlocked])
 
   function advance() {
     if (advancedRef.current) return
@@ -231,9 +203,6 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
 
   return (
     <div className="grid gap-4">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <audio ref={audioRef} src={song.preview_url} preload="auto" />
-
       <div className="flex items-center justify-center gap-2">
         {Array.from({ length: songTotal }).map((_, i) => (
           <span

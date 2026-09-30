@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, GripVertical, Loader2, Play } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { playClip, stopClip, unlockAudio, useAudioUnlock } from '../lib/audio.js'
+import { playClip, stopClip } from '../lib/audio.js'
 import Marquee from '../components/Marquee.jsx'
 import RankRevealTakeover from '../components/RankRevealTakeover.jsx'
 
@@ -58,7 +58,6 @@ function useNow(step = 250) {
 export default function Ranking({ room, players, rounds, rankings, me }) {
   const promptOrd = room.current_prompt ?? 0
   const now = useNow(250)
-  const audioRef = useRef(null)
   const finalizedRef = useRef(false)
   // Active grip-drag session: pointer capture retargets every move/up event
   // to the grip itself, so ALL drag logic must live on the grip element.
@@ -137,38 +136,38 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
   const rankDeadline = maxDeadline > 0 ? maxDeadline + RANK_WINDOW_MS : 0
   const rankLeft = rankDeadline > 0 ? rankDeadline - now : null
 
-  // First gesture unlocks programmatic audio (iOS autoplay policy), with
-  // the first clip pre-bound so the unlock counts as genuine playback.
-  // After any real tap, timer-driven plays are allowed for the session.
-  useAudioUnlock(audioRef, () => group[0]?.preview_url ?? null)
-
   function markBroken(id) {
     setBadClips((prev) => (prev.has(id) ? prev : new Set(prev).add(id)))
   }
 
+  function clipOpts(id) {
+    return {
+      onBlocked: () => setAudioBlocked(true),
+      onBroken: () => markBroken(id),
+      onPlaying: () => setAudioBlocked(false),
+    }
+  }
+
   function playCurrent(song) {
     if (!song?.preview_url || badClips.has(song.id)) return
-    playClip(audioRef.current, song, {
-      onBlocked: () => setAudioBlocked(true),
-      onBroken: () => markBroken(song.id),
-    })
+    playClip(song, clipOpts(song.id))
   }
 
   // Synced clip playback during listening.
   useEffect(() => {
-    const el = audioRef.current
-    if (!el || !listening) {
-      if (!listening) stopClip(el)
+    if (!listening) {
+      stopClip()
       return undefined
     }
     const song = group[Math.max(0, listenIdx)]
     if (!song?.preview_url || badClips.has(song.id)) return undefined
     playCurrent(song)
-    return () => {
-      stopClip(el)
-    }
+    return () => stopClip()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listening, listenIdx, promptOrd])
+
+  // Stop any replay when leaving the phase.
+  useEffect(() => () => stopClip(), [])
 
   // Deadline: anyone finalizes once (auto-completes AFK ballots + reveals).
   useEffect(() => {
@@ -244,34 +243,6 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
     setBusy(false)
   }
 
-  // While blocked, ANY natural tap retries the current clip in-gesture —
-  // votes, replays, drags, scroll touches. No sound button anywhere; the
-  // advisory pill below clears itself the moment audio starts.
-  // (Before the early returns: hooks must run unconditionally.)
-  useEffect(() => {
-    if (revealed || !audioBlocked) return
-    function retry() {
-      const el = audioRef.current
-      if (!el) return
-      const pool = listening
-        ? group
-        : order.map((id) => others.find((r) => r.id === id)).filter(Boolean)
-      const target = listening ? pool[Math.max(0, listenIdx)] : pool[0]
-      if (!target?.preview_url || badClips.has(target.id)) return
-      // Sync unlock attempt first (runs inside the gesture), then the
-      // shared helper fast-paths the play when the clip is loaded.
-      unlockAudio(el)
-      setAudioBlocked(false)
-      playClip(el, target, {
-        onBlocked: () => setAudioBlocked(true),
-        onBroken: () => markBroken(target.id),
-      })
-    }
-    window.addEventListener('pointerdown', retry)
-    return () => window.removeEventListener('pointerdown', retry)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealed, audioBlocked, listening, listenIdx, group, order, others, badClips])
-
   if (group.length === 0) return <p className="py-10 text-center text-sm text-zinc-400">Loading prompt…</p>
 
   if (revealed) {
@@ -293,9 +264,6 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
 
   return (
     <section className="mx-auto grid w-full min-w-0 max-w-lg gap-4 overflow-hidden lg:max-w-xl">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <audio ref={audioRef} preload="auto" />
-
       <p className="text-center text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300">
         4 · Ranking — prompt {promptOrd + 1} of {promptCount}
       </p>
@@ -410,13 +378,7 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
                   ) : (
                     <button
                       onClick={() => {
-                        setAudioBlocked(false)
-                        if (r.preview_url && !badClips.has(r.id)) {
-                          playClip(audioRef.current, r, {
-                            onBlocked: () => setAudioBlocked(true),
-                            onBroken: () => markBroken(r.id),
-                          })
-                        }
+                        if (r.preview_url && !badClips.has(r.id)) playClip(r, clipOpts(r.id))
                       }}
                       aria-label={`Replay ${r.title}`}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition active:scale-95 lg:hover:bg-white/15"

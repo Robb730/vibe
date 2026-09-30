@@ -1,31 +1,58 @@
-import { useEffect, useRef } from 'react'
-
-// Shared clip playback for the song phases (guess + rank).
+// Global clip playback for the song phases (guess + rank).
+//
+// One module-level <audio> element plays every clip, so an iOS playback
+// token granted to it (via any in-gesture play) stays valid for all later
+// timer-driven plays in both game modes. Importing this module installs a
+// one-time first-gesture unlock.
+//
 // Mobile browsers (especially iOS Safari) reject timer-driven unmuted
 // play() with NotAllowedError until the user has gestured once per page.
-// So: unlock on the first gesture with a REAL source (empty-element plays
-// don't reliably grant the token), then every later timed play is allowed.
-// While blocked, ANY natural tap retries the current clip in-gesture —
-// no dedicated sound button anywhere.
-//
 // Plain <audio> elements throughout (playback category: robust to the
 // silent switch, unlike Web Audio).
 
-const genMap = new WeakMap()
-const timerMap = new WeakMap()
+const UNLOCK_CHIME_SRC = '/sounds/songs-open.mp3'
 
-function clearTimer(el) {
-  const t = timerMap.get(el)
-  if (t) {
-    clearTimeout(t)
-    timerMap.delete(el)
+let el = null
+let gen = 0
+let pauseTimer = null
+let playingHandler = null
+let unlocked = false
+
+function ensureEl() {
+  if (el) return el
+  if (typeof window === 'undefined' || typeof window.Audio === 'undefined') return null
+  try {
+    el = new window.Audio()
+    el.preload = 'auto'
+  } catch {
+    return null
+  }
+  return el
+}
+
+function clearTimer() {
+  if (pauseTimer) {
+    clearTimeout(pauseTimer)
+    pauseTimer = null
   }
 }
 
-export function stopClip(el) {
+function detachPlaying() {
+  if (el && playingHandler) {
+    try {
+      el.removeEventListener('playing', playingHandler)
+    } catch {
+      /* ignore */
+    }
+    playingHandler = null
+  }
+}
+
+export function stopClip() {
+  gen += 1
+  clearTimer()
+  detachPlaying()
   if (!el) return
-  genMap.set(el, (genMap.get(el) ?? 0) + 1)
-  clearTimer(el)
   try {
     el.pause()
   } catch {
@@ -34,50 +61,61 @@ export function stopClip(el) {
 }
 
 // Play one 10s clip from song.clip_start. Seeks only after metadata is
-// ready (synchronous seeks fail on cellular Safari); reports blocked vs
-// broken via callbacks so callers show "tap anywhere" vs "no preview".
+// ready (synchronous seeks fail on cellular Safari). Reports blocked vs
+// broken vs actually-playing via callbacks so callers show "tap anywhere"
+// vs "no preview" and clear the pill the moment sound starts.
 // Returns false when there is nothing to play.
-export function playClip(el, song, { onBlocked, onBroken } = {}) {
-  if (!el || !song?.preview_url) return false
-  const gen = (genMap.get(el) ?? 0) + 1
-  genMap.set(el, gen)
-  clearTimer(el)
+export function playClip(song, { onBlocked, onBroken, onPlaying } = {}) {
+  const target = ensureEl()
+  if (!target || !song?.preview_url) return false
+  gen += 1
+  const myGen = gen
+  clearTimer()
+  detachPlaying()
+  const alive = () => myGen === gen
   const startAt = song.clip_start ?? 0
-  const alive = () => genMap.get(el) === gen
 
   function finish() {
-    clearTimer(el)
-    timerMap.set(
-      el,
-      setTimeout(() => {
-        if (alive()) {
-          try {
-            el.pause()
-          } catch {
-            /* ignore */
-          }
+    clearTimer()
+    pauseTimer = setTimeout(() => {
+      if (alive()) {
+        try {
+          target.pause()
+        } catch {
+          /* ignore */
         }
-      }, 10_000)
-    )
+      }
+    }, 10_000)
   }
 
   function begin() {
     if (!alive()) return
     try {
-      el.currentTime = startAt
+      target.currentTime = startAt
     } catch {
       /* seek failed: play from 0 rather than staying silent */
     }
+    playingHandler = () => {
+      if (!alive()) return
+      onPlaying?.()
+    }
+    try {
+      target.addEventListener('playing', playingHandler)
+    } catch {
+      /* ignore */
+    }
     let pr = null
     try {
-      pr = el.play()
+      pr = target.play()
     } catch {
+      detachPlaying()
       onBlocked?.()
       return
     }
     if (pr && typeof pr.catch === 'function') {
       pr.catch((err) => {
         if (!alive()) return
+        detachPlaying()
         if (err?.name === 'NotAllowedError') onBlocked?.()
         else onBroken?.()
       })
@@ -91,10 +129,10 @@ export function playClip(el, song, { onBlocked, onBroken } = {}) {
   } catch {
     /* relative URL: compare raw */
   }
-  // Same URL already loaded: seek + play synchronously, which keeps the
+  // Same clip already loaded: seek + play synchronously, which keeps the
   // iOS gesture token when called from a tap handler.
   try {
-    if (el.src === abs && el.readyState >= 1) {
+    if (target.src === abs && target.readyState >= 1) {
       begin()
       return true
     }
@@ -102,8 +140,8 @@ export function playClip(el, song, { onBlocked, onBroken } = {}) {
     /* fall through to reload */
   }
   try {
-    el.src = song.preview_url
-    el.load()
+    target.src = song.preview_url
+    target.load()
   } catch {
     onBroken?.()
     return false
@@ -111,8 +149,12 @@ export function playClip(el, song, { onBlocked, onBroken } = {}) {
   let done = false
   const cleanup = () => {
     clearTimeout(metaTimer)
-    el.removeEventListener('loadedmetadata', onMeta)
-    el.removeEventListener('error', onErr)
+    try {
+      target.removeEventListener('loadedmetadata', onMeta)
+      target.removeEventListener('error', onErr)
+    } catch {
+      /* ignore */
+    }
   }
   const onMeta = () => {
     if (done) return
@@ -132,37 +174,42 @@ export function playClip(el, song, { onBlocked, onBroken } = {}) {
     cleanup()
     begin()
   }, 3000)
-  el.addEventListener('loadedmetadata', onMeta)
-  el.addEventListener('error', onErr)
+  try {
+    target.addEventListener('loadedmetadata', onMeta)
+    target.addEventListener('error', onErr)
+  } catch {
+    /* ignore */
+  }
   return true
 }
 
-// Synchronous play-then-pause inside a real user gesture. Grants iOS the
-// playback token for later timer-driven plays. Pass a preview URL so the
-// unlock is genuine playback, not an empty-element play.
-export function unlockAudio(el, previewUrl) {
-  if (!el) return
+// Genuine in-gesture playback on the shared element: grants iOS the token
+// for all later timer-driven plays. Falls back to the bundled chime when
+// the element has no source yet.
+function unlockNow() {
+  const target = ensureEl()
+  if (!target) return
   try {
-    if (previewUrl && !el.src) {
-      el.src = previewUrl
+    if (!target.src) {
+      target.src = UNLOCK_CHIME_SRC
       try {
-        el.load()
+        target.load()
       } catch {
         /* ignore */
       }
     }
-    const pr = el.play()
+    const pr = target.play()
     if (pr && typeof pr.then === 'function') {
       pr.then(() => {
         try {
-          el.pause()
+          target.pause()
         } catch {
           /* ignore */
         }
       }).catch(() => {})
     } else {
       try {
-        el.pause()
+        target.pause()
       } catch {
         /* ignore */
       }
@@ -172,30 +219,16 @@ export function unlockAudio(el, previewUrl) {
   }
 }
 
-// One-time first-gesture unlock. getPreviewUrl is read at gesture time so
-// callers can supply whatever clip is current (first song of the group).
-export function useAudioUnlock(audioRef, getPreviewUrl) {
-  const cb = useRef(null)
-  useEffect(() => {
-    cb.current = getPreviewUrl
-  })
-  useEffect(() => {
-    function unlock() {
-      let src = null
-      try {
-        src = cb.current?.() ?? null
-      } catch {
-        src = null
-      }
-      unlockAudio(audioRef.current, src)
-      window.removeEventListener('pointerdown', unlock)
-      window.removeEventListener('touchend', unlock)
-    }
-    window.addEventListener('pointerdown', unlock)
-    window.addEventListener('touchend', unlock)
-    return () => {
-      window.removeEventListener('pointerdown', unlock)
-      window.removeEventListener('touchend', unlock)
-    }
-  }, [audioRef])
+// Installed once at import: the first real user gesture anywhere unlocks
+// audio for the whole session (both game modes, no modal needed).
+if (typeof window !== 'undefined') {
+  const unlockOnce = () => {
+    if (unlocked) return
+    unlocked = true
+    unlockNow()
+    window.removeEventListener('pointerdown', unlockOnce)
+    window.removeEventListener('touchend', unlockOnce)
+  }
+  window.addEventListener('pointerdown', unlockOnce)
+  window.addEventListener('touchend', unlockOnce)
 }
