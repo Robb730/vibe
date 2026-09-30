@@ -41,7 +41,7 @@ const iconBtn =
 
 export default function Room() {
   const { code } = useParams()
-  const { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages } = useRoom(code)
+  const { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages, refreshAll } = useRoom(code)
   const [myUserId, setMyUserId] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -144,10 +144,12 @@ export default function Room() {
     return () => clearTimeout(t)
   }, [roomDeleted])
 
-  // Tab close / background kill (mobile Safari fires pagehide, not
-  // beforeunload): best-effort leave so rosters update in realtime and
-  // empty rooms get deleted. leave_room no-ops when the row is gone, so
-  // double-sends with the Leave button are harmless.
+  // Tab close ONLY (mobile Safari fires pagehide, not beforeunload):
+  // best-effort leave so rosters update in realtime and empty rooms get
+  // deleted. Tab switches, minimizes, and lock screens must NOT leave —
+  // so there is deliberately no visibilitychange-hidden beacon here.
+  // leave_room no-ops when the row is gone, so double-sends with the
+  // Leave button are harmless.
   const leftRef = useRef(false)
   useEffect(() => {
     const id = room?.id
@@ -156,14 +158,9 @@ export default function Room() {
       if (leftRef.current) return
       leaveRoomBeacon(id)
     }
-    function onVis() {
-      if (document.visibilityState === 'hidden') beacon()
-    }
     window.addEventListener('pagehide', beacon)
-    document.addEventListener('visibilitychange', onVis)
     return () => {
       window.removeEventListener('pagehide', beacon)
-      document.removeEventListener('visibilitychange', onVis)
     }
   }, [room?.id, roomDeleted])
 
@@ -221,7 +218,10 @@ export default function Room() {
   // Reload after join guarantees entry even if realtime isn't applied yet;
   // with 0003 applied the reload is a harmless one-time cost.
   if (!me) {
-    return <JoinGate room={room} onJoined={() => window.location.reload()} />
+    // In-place entry: refresh state instead of reloading, so joining can
+    // never race an unload (reload + pagehide beacon used to delete the
+    // just-created row and bounce phone users back to this gate).
+    return <JoinGate room={room} onJoined={() => refreshAll()} />
   }
 
   const inviteLink = `${window.location.origin}/room/${room.code}`

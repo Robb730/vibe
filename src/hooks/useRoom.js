@@ -18,6 +18,9 @@ export function useRoom(code) {
   const [roomDeleted, setRoomDeleted] = useState(false)
   const roomIdRef = useRef(null)
   const cancelledRef = useRef(false)
+  // Latest full refresh (players/rounds/votes/rankings/messages), installed
+  // once the room row is known. Lets joiners enter without a page reload.
+  const refreshAllRef = useRef(null)
 
   useEffect(() => {
     if (!code) return
@@ -111,8 +114,10 @@ export function useRoom(code) {
       }
       setRoom(roomRow)
       roomIdRef.current = roomRow.id
+      refreshAllRef.current = () =>
+        Promise.all([fetchPlayers(roomRow.id), fetchRounds(roomRow.id), fetchVotes(roomRow.id), fetchRankings(roomRow.id), fetchMessages(roomRow.id)])
 
-      await Promise.all([fetchPlayers(roomRow.id), fetchRounds(roomRow.id), fetchVotes(roomRow.id), fetchRankings(roomRow.id), fetchMessages(roomRow.id)])
+      await refreshAllRef.current()
       if (cancelled) return
       setLoading(false)
 
@@ -216,5 +221,9 @@ export function useRoom(code) {
     return () => clearInterval(t)
   }, [loading, refreshMessages, code])
 
-  return { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages }
+  // In-place refresh for joiners (no page reload): re-runs the full fetch
+  // set once the room row is known. No loading flash, no session churn.
+  const refreshAll = useCallback(() => refreshAllRef.current?.(), [])
+
+  return { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages, refreshAll }
 }

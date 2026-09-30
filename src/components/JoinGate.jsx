@@ -5,6 +5,14 @@ import VibeLogo from './VibeLogo.jsx'
 
 // Gate for visitors opening an invite link who aren't players yet.
 // Mid-game arrivals are blocked (no spectator mode in MVP).
+const JOIN_TIMEOUT_MS = 15_000
+
+function friendlyJoinError(msg) {
+  if (/already started/i.test(msg ?? '')) return 'This game already started — ask the host for the next round.'
+  if (/full/i.test(msg ?? '')) return 'Room is full (8 max) — wait for the next game.'
+  return msg
+}
+
 export default function JoinGate({ room, onJoined }) {
   const [nickname, setNickname] = useState('')
   const [busy, setBusy] = useState(false)
@@ -34,17 +42,31 @@ export default function JoinGate({ room, onJoined }) {
   async function join(e) {
     e.preventDefault()
     if (!nickname.trim()) return setError('Enter a nickname first.')
+    // Blocked storage (private mode / locked-down webviews) means the
+    // session can't persist — joining would bounce straight back here.
+    try {
+      localStorage.setItem('vibe-storage-test', '1')
+      localStorage.removeItem('vibe-storage-test')
+    } catch {
+      setError('Joining won\u2019t stick in private mode — open this link in Safari.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const { error } = await supabase.rpc('join_room', {
-        p_code: room.code,
-        p_nickname: nickname.trim(),
-      })
+      const { error } = await Promise.race([
+        supabase.rpc('join_room', {
+          p_code: room.code,
+          p_nickname: nickname.trim(),
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('JOIN_TIMEOUT')), JOIN_TIMEOUT_MS)),
+      ])
       if (error) throw error
       onJoined?.()
     } catch (err) {
-      setError(err.message)
+      setError(err?.message === 'JOIN_TIMEOUT'
+        ? 'Still trying — check your connection and tap Join again.'
+        : friendlyJoinError(err.message))
     } finally {
       setBusy(false)
     }
