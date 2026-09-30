@@ -9,6 +9,10 @@ const SUSPENSE_MS = 1800
 const UNMASK_MS = 950
 const TALLY_MS = 1500
 
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
+
 function TallyRow({ player, correct, total, rank, start }) {
   const shown = useCountUp(correct, 1100, start)
   return (
@@ -109,16 +113,16 @@ export default function RevealTakeover({ room, group, players, votes, isHost, is
   return (
     // shrink-0 + w-full: never let a flex/grid parent squash the reveal.
     // Clipping lives on the background layer only, so content can't be cut off.
-    <div className="relative isolate w-full shrink-0 rounded-3xl bg-zinc-950/70 ring-1 ring-inset ring-white/[0.08]">
+    <div className="relative isolate w-full max-w-full shrink-0 overflow-hidden rounded-3xl bg-zinc-950/70 ring-1 ring-inset ring-white/[0.08]">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-3xl" aria-hidden>
         <div className="reveal-spotlight absolute inset-0" />
       </div>
 
-      <div className="mx-auto flex min-h-[min(30rem,72dvh)] w-full max-w-lg flex-col gap-6 p-5 sm:p-8">
-        <div className="grid gap-3 text-center">
+      <div className="mx-auto flex min-h-[min(30rem,72dvh)] w-full min-w-0 max-w-lg flex-col gap-6 p-5 sm:p-8">
+        <div className="grid min-w-0 gap-3 text-center">
           <p className="text-sm font-medium text-violet-300">Prompt {room.current_prompt + 1}</p>
-          <h3 className="font-display text-balance text-2xl font-black leading-snug sm:text-3xl">
-            “{group[0]?.prompt_text}”
+          <h3 className="font-display text-balance break-words text-2xl font-black leading-snug sm:text-3xl">
+            “{stripQuotes(group[0]?.prompt_text)}”
           </h3>
         </div>
 
@@ -219,11 +223,11 @@ export default function RevealTakeover({ room, group, players, votes, isHost, is
 
                   {shown &&
                     (correctVoters.length > 0 ? (
-                      <span className="reveal-stamp-in shrink-0 self-start rounded-full bg-emerald-400/10 px-2.5 py-1 text-xs font-bold tabular-nums text-emerald-300 ring-1 ring-inset ring-emerald-400/30 sm:self-center">
+                      <span className="reveal-stamp-in min-w-[2.75rem] shrink-0 self-start rounded-full bg-emerald-400/10 px-2.5 py-1 text-center text-xs font-bold tabular-nums text-emerald-300 ring-1 ring-inset ring-emerald-400/30 sm:self-center">
                         +{correctVoters.length}
                       </span>
                     ) : (
-                      <span className="reveal-stamp-in shrink-0 self-start rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-zinc-400 ring-1 ring-inset ring-white/10 sm:self-center">
+                      <span className="reveal-stamp-in min-w-[2.75rem] shrink-0 self-start rounded-full bg-white/5 px-2.5 py-1 text-center text-[11px] font-semibold text-zinc-400 ring-1 ring-inset ring-white/10 sm:self-center">
                         +0
                       </span>
                     ))}

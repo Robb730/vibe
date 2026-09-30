@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase.js'
 import Avatar from './Avatar.jsx'
 import Marquee from './Marquee.jsx'
 
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
+
 // Revealed leaderboard for one prompt group: who picked what, who guessed right.
 export default function PromptLeaderboard({ room, group, players, votes, isHost, isLast }) {
   const [busy, setBusy] = useState(false)
@@ -39,7 +43,7 @@ export default function PromptLeaderboard({ room, group, players, votes, isHost,
         <h3 className="font-display text-balance text-xl font-black leading-tight sm:text-2xl">
           Prompt {room.current_prompt + 1} results
         </h3>
-        <p className="max-w-full break-words text-balance text-sm text-zinc-400">“{group[0]?.prompt_text}”</p>
+        <p className="max-w-full break-words text-balance text-sm text-zinc-400">“{stripQuotes(group[0]?.prompt_text)}”</p>
       </div>
 
       <ul className="grid min-w-0 gap-2.5">

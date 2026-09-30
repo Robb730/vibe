@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase, ensureAnonSession } from '../lib/supabase.js'
+import { supabase, ensureAnonSession, leaveRoomBeacon } from '../lib/supabase.js'
 import { playPhaseSound } from '../lib/countdownSound.js'
 import { useRoom } from '../hooks/useRoom.js'
 import VibeLogo from '../components/VibeLogo.jsx'
@@ -144,6 +144,29 @@ export default function Room() {
     return () => clearTimeout(t)
   }, [roomDeleted])
 
+  // Tab close / background kill (mobile Safari fires pagehide, not
+  // beforeunload): best-effort leave so rosters update in realtime and
+  // empty rooms get deleted. leave_room no-ops when the row is gone, so
+  // double-sends with the Leave button are harmless.
+  const leftRef = useRef(false)
+  useEffect(() => {
+    const id = room?.id
+    if (!id || roomDeleted) return undefined
+    function beacon() {
+      if (leftRef.current) return
+      leaveRoomBeacon(id)
+    }
+    function onVis() {
+      if (document.visibilityState === 'hidden') beacon()
+    }
+    window.addEventListener('pagehide', beacon)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('pagehide', beacon)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [room?.id, roomDeleted])
+
   if (loading || !authReady) {
     return (
       <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950">
@@ -224,6 +247,7 @@ export default function Room() {
             <VibeLogo size="sm" />
             <button
               onClick={async () => {
+                leftRef.current = true
                 try {
                   await supabase.rpc('leave_room', { p_room_id: room.id })
                 } catch {

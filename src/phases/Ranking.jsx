@@ -45,6 +45,10 @@ function fmt(ms) {
   return `0:${String(s).padStart(2, '0')}`
 }
 
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
+
 function useNow(step = 250) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -267,7 +271,7 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
       <p className="text-center text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300">
         4 · Ranking — prompt {promptOrd + 1} of {promptCount}
       </p>
-      <h3 className="font-display px-2 text-center text-xl font-black text-balance sm:text-2xl">“{group[0]?.prompt_text}”</h3>
+      <h3 className="font-display break-words px-2 text-center text-xl font-black text-balance sm:text-2xl">“{stripQuotes(group[0]?.prompt_text)}”</h3>
 
       {audioBlocked && (
         <p
@@ -324,7 +328,7 @@ export default function Ranking({ room, players, rounds, rankings, me }) {
               )
             })}
           </ul>
-          <p className="text-center text-xs text-zinc-500">Ranking opens when the last clip ends. Your song stays hidden.</p>
+          <p className="mx-auto w-full max-w-full truncate px-12 text-center text-xs text-zinc-500">Ranking opens when the last clip ends. Your song stays hidden.</p>
         </div>
       ) : (
         <div className="grid gap-4">

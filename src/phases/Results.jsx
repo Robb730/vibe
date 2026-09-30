@@ -5,6 +5,10 @@ import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
 import { useCountUp } from '../hooks/useCountUp.js'
 
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
+
 function FinalScore({ score, start }) {
   const shown = useCountUp(score, 1100, start)
   return <span className="ml-auto shrink-0 font-mono text-sm tabular-nums">{shown} pts</span>
@@ -81,8 +85,8 @@ export default function Results({ room, players, rounds, votes, rankings = [], m
           className={`${animate ? 'reveal-row-in ' : ''}grid gap-2`}
           style={animate ? { animationDelay: `${Math.min(300 + gi * 150, 900)}ms` } : undefined}
         >
-          <p className="mt-2 px-1 text-xs font-bold uppercase tracking-[0.25em] text-violet-300">
-            Prompt {g.ord + 1} · <span className="normal-case text-zinc-200">“{g.prompt}”</span>
+          <p className="mt-2 break-words px-1 text-xs font-bold uppercase tracking-[0.25em] text-violet-300">
+            Prompt {g.ord + 1} · <span className="normal-case text-zinc-200">“{stripQuotes(g.prompt)}”</span>
           </p>
           {g.songs.map((r) => {
             const picker = players.find((p) => p.id === r.picker_id)

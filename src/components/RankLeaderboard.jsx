@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase.js'
 import Avatar from './Avatar.jsx'
 import Marquee from './Marquee.jsx'
 
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
+
 // Revealed leaderboard for one prompt group in rank mode:
 // Borda points + 1st-place counts per song and per player.
 export default function RankLeaderboard({ room, group, players, rankings, isHost, isLast }) {
@@ -56,7 +60,7 @@ export default function RankLeaderboard({ room, group, players, rankings, isHost
         <h3 className="font-display text-balance text-xl font-black leading-tight sm:text-2xl">
           Prompt {room.current_prompt + 1} results
         </h3>
-        <p className="max-w-full break-words text-balance text-sm text-zinc-400">“{group[0]?.prompt_text}”</p>
+        <p className="max-w-full break-words text-balance text-sm text-zinc-400">“{stripQuotes(group[0]?.prompt_text)}”</p>
         <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-violet-300">Ranked · Borda scoring</p>
       </div>
 

@@ -2,6 +2,10 @@ import { EyeOff, Lock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { playClip, stopClip } from '../lib/audio.js'
+
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
 import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
 import RevealTakeover from '../components/RevealTakeover.jsx'
@@ -354,7 +358,7 @@ export default function Guessing({ room, players, rounds, votes, me }) {
       <p className="text-center text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300">
         4 · Guessing — prompt {promptOrd + 1} of {promptCount}
       </p>
-      <h3 className="font-display px-2 text-center text-xl font-black sm:text-2xl">“{group[0]?.prompt_text}”</h3>
+      <h3 className="font-display break-words px-2 text-center text-xl font-black text-balance sm:text-2xl">“{stripQuotes(group[0]?.prompt_text)}”</h3>
       {song && (
         <SongVote
           key={song.id}
