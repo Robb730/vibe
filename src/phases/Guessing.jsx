@@ -1,6 +1,7 @@
 import { EyeOff, Lock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { playClip, stopClip, unlockAudio, useAudioUnlock } from '../lib/audio.js'
 import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
 import RevealTakeover from '../components/RevealTakeover.jsx'
@@ -98,11 +99,18 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [ffLeft, setFfLeft] = useState(null) // fast-forward 3s countdown
+  const [audioBlocked, setAudioBlocked] = useState(false)
+  const [unplayable, setUnplayable] = useState(false)
   const audioRef = useRef(null)
-  const pauseTimer = useRef(null)
   const advancedRef = useRef(false)
   const stampedRef = useRef(false)
   const ffTimer = useRef(null)
+  const songRef = useRef(song)
+  songRef.current = song
+
+  // First gesture unlocks audio (iOS policy); pre-bind this song's preview
+  // so the unlock counts as genuine playback.
+  useAudioUnlock(audioRef, () => songRef.current?.preview_url ?? null)
 
   const songVotes = votes.filter((v) => v.round_id === song.id)
   const myVote = me ? songVotes.find((v) => v.voter_id === me.id) : null
@@ -114,31 +122,39 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
     })
   }, [song.id])
 
-  // Auto-play the clip when this song goes live. No tap-to-play UI in
-  // voting by design; a blocked autoplay simply stays silent.
-  function playClip() {
-    const el = audioRef.current
-    if (!el) return
-    el.currentTime = song.clip_start ?? 0
-    try {
-      const pr = el.play()
-      if (pr && typeof pr.catch === 'function') pr.catch(() => {})
-    } catch {
-      /* autoplay blocked: stay silent */
-    }
-    clearTimeout(pauseTimer.current)
-    pauseTimer.current = setTimeout(() => el.pause(), 10_000)
-  }
-
+  // Auto-play the clip when this song goes live. While blocked, ANY
+  // natural tap retries in-gesture — no sound button anywhere.
   useEffect(() => {
-    playClip()
     const el = audioRef.current
+    setAudioBlocked(false)
+    setUnplayable(false)
+    playClip(el, song, {
+      onBlocked: () => setAudioBlocked(true),
+      onBroken: () => setUnplayable(true),
+    })
     return () => {
-      clearTimeout(pauseTimer.current)
-      el?.pause()
+      stopClip(el)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song.id, song.clip_start])
+
+  useEffect(() => {
+    if (!audioBlocked) return
+    function retry() {
+      const s = songRef.current
+      if (!s?.preview_url) return
+      // Unlock attempt runs synchronously in the gesture, then the shared
+      // helper fast-paths the play when the clip is already loaded.
+      unlockAudio(audioRef.current)
+      setAudioBlocked(false)
+      playClip(audioRef.current, s, {
+        onBlocked: () => setAudioBlocked(true),
+        onBroken: () => setUnplayable(true),
+      })
+    }
+    window.addEventListener('pointerdown', retry)
+    return () => window.removeEventListener('pointerdown', retry)
+  }, [audioBlocked])
 
   function advance() {
     if (advancedRef.current) return
@@ -219,6 +235,12 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
 
       {!locked && <CountdownBar deadline={song.vote_deadline} />}
 
+      {audioBlocked && !unplayable && (
+        <p aria-live="polite" className="mx-auto w-fit rounded-full bg-amber-400/10 px-3 py-1 text-[11px] font-semibold text-amber-200 ring-1 ring-inset ring-amber-400/30">
+          🔇 Tap anywhere for sound
+        </p>
+      )}
+
       <div className="rounded-3xl border border-violet-500/15 bg-gradient-to-b from-violet-950/50 to-black/40 p-4 text-center sm:p-5">
         <div className="mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-black/50 p-3 text-left">
           {song.artwork_url && <img src={song.artwork_url} alt="" className="h-12 w-12 shrink-0 rounded-xl" />}
@@ -226,9 +248,15 @@ function SongVote({ song, players, votes, me, room, songPos, songTotal }) {
             <Marquee label={song.title} className="text-sm font-bold">{song.title}</Marquee>
             <Marquee label={song.artist} className="text-xs uppercase tracking-wider text-zinc-500">{song.artist}</Marquee>
           </div>
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10" aria-hidden>
-            <span className="eq-bar h-5" style={{ animationDelay: '0s' }} />
-          </span>
+          {(!song.preview_url || unplayable) ? (
+            <span className="shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-zinc-500 ring-1 ring-inset ring-white/10">
+              No preview
+            </span>
+          ) : (
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10" aria-hidden>
+              <span className="eq-bar h-5" style={{ animationDelay: '0s' }} />
+            </span>
+          )}
         </div>
       </div>
 

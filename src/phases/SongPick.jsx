@@ -31,6 +31,10 @@ function saveMine(roomId, id) {
 }
 
 // One prompt slot: live search -> select -> clip -> lock.
+function stripQuotes(s) {
+  return String(s ?? '').replace(/^["“”'‘’]+|["“”'‘’]+$/g, '').trim()
+}
+
 function SlotAnswer({ slot, onLocked }) {
   const [selected, setSelected] = useState(null)
   const [clipStart, setClipStart] = useState(0)
@@ -57,18 +61,20 @@ function SlotAnswer({ slot, onLocked }) {
   }
 
   return (
-    <div className="grid gap-7">
-      <div>
-        <p className="font-display text-2xl font-black leading-snug sm:text-3xl">“{slot.prompt_text}”</p>
+    <div className="grid min-w-0 max-w-full gap-7 overflow-hidden">
+      <div className="min-w-0">
+        <p className="font-display text-balance break-words text-2xl font-black leading-snug sm:text-3xl">“{stripQuotes(slot.prompt_text)}”</p>
         <p className="mt-3 text-sm text-zinc-500">Pick the song that fits. Nobody sees who wrote it.</p>
       </div>
 
       {!selected ? (
-        <SongSearch onSelect={setSelected} autoFocus />
+        <div className="min-w-0 max-w-full overflow-hidden">
+          <SongSearch onSelect={setSelected} autoFocus />
+        </div>
       ) : (
         <>
-          <div className="flex items-center gap-3 rounded-2xl bg-zinc-900 p-2.5 pr-2 ring-1 ring-inset ring-white/[0.06]">
-            <img src={selected.artworkUrl60} alt="" className="h-14 w-14 shrink-0 rounded-xl bg-zinc-800" />
+          <div className="flex min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-2xl bg-zinc-900 p-2.5 pr-2 ring-1 ring-inset ring-white/[0.06]">
+            <img src={selected.artworkUrl60} alt="" draggable={false} className="h-14 w-14 shrink-0 rounded-xl bg-zinc-800" />
             <div className="min-w-0 flex-1">
               <Marquee label={selected.trackName} className="font-semibold">{selected.trackName}</Marquee>
               <Marquee label={selected.artistName} className="text-sm text-zinc-500">{selected.artistName}</Marquee>
@@ -196,19 +202,19 @@ export default function SongPick({ room, players, rounds, me }) {
   const stepIdx = mySlots.indexOf(current)
 
   return (
-    <section className="mx-auto grid max-w-lg gap-8 lg:max-w-2xl">
+    <section className="mx-auto grid w-full min-w-0 max-w-lg gap-8 overflow-hidden lg:max-w-2xl">
       {/* Progress */}
-      <div className="grid gap-3">
-        <p className="text-sm font-medium tabular-nums text-zinc-400">
+      <div className="grid min-w-0 gap-3">
+        <p className="truncate text-sm font-medium tabular-nums text-zinc-400">
           Song {Math.min(doneCount + 1, mySlots.length)} of {mySlots.length}
         </p>
-        <div className="flex gap-1.5" aria-hidden>
+        <div className="flex min-w-0 gap-1.5" aria-hidden>
           {mySlots.map((s, i) => {
             const done = Boolean(roundsById.get(s.id)?.track_id)
             return (
               <span
                 key={s.id}
-                className={`h-1 flex-1 rounded-full transition-colors ${
+                className={`h-1 min-w-0 flex-1 rounded-full transition-colors ${
                   done ? 'bg-white' : i === stepIdx ? 'bg-violet-400' : 'bg-zinc-800'
                 }`}
               />
@@ -219,7 +225,7 @@ export default function SongPick({ room, players, rounds, me }) {
 
       <SlotAnswer key={current.id} slot={current} onLocked={handleLocked} />
 
-      <p className="text-center text-xs tabular-nums text-zinc-600">
+      <p className="mx-auto w-full max-w-full truncate px-12 text-center text-xs tabular-nums text-zinc-600">
         {songsIn} of {rounds.length} songs in from {players.length} players
         {isHost ? ' · you start the guessing' : ''}
       </p>

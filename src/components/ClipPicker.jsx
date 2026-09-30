@@ -82,11 +82,11 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
   const playedUntil = clipStart + progress * CLIP
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 max-w-full gap-5 overflow-hidden">
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <audio ref={audioRef} src={previewUrl} preload="auto" onTimeUpdate={onTimeUpdate} onEnded={stop} />
 
-      <div>
+      <div className="min-w-0 max-w-full">
         <div
           ref={trackRef}
           role="slider"
@@ -101,7 +101,7 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onKeyDown={onKeyDown}
-          className="flex h-16 cursor-pointer touch-none select-none items-center gap-[2px] rounded-2xl bg-zinc-900 px-3 outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+          className="flex h-16 w-full min-w-0 max-w-full cursor-pointer touch-none select-none items-center gap-[2px] overflow-hidden rounded-2xl bg-zinc-900 px-3 outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
         >
           {BARS.map((h, i) => {
             const t = ((i + 0.5) / BAR_COUNT) * TOTAL
@@ -111,7 +111,7 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
               <span
                 key={i}
                 style={{ height: `${h * 100}%` }}
-                className={`flex-1 rounded-full transition-colors duration-150 ${
+                className={`min-w-0 flex-1 rounded-full transition-colors duration-150 ${
                   played ? 'bg-violet-400' : inWindow ? 'bg-white' : 'bg-zinc-700'
                 }`}
               />
@@ -124,7 +124,7 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-4">
         <button
           type="button"
           onClick={playing ? stop : playClip}
@@ -133,11 +133,11 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
         >
           {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="ml-0.5 h-5 w-5" fill="currentColor" />}
         </button>
-        <div className="min-w-0">
-          <p className="text-base font-semibold tabular-nums">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-semibold tabular-nums">
             {fmt(clipStart)} – {fmt(clipStart + CLIP)}
           </p>
-          <p className="text-sm text-zinc-500">Drag to choose your 10 second clip</p>
+          <p className="truncate text-sm text-zinc-500">Drag to choose your 10 second clip</p>
         </div>
       </div>
 
@@ -145,7 +145,7 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
         type="button"
         onClick={onSubmit}
         disabled={submitting}
-        className="flex h-12 w-full items-center justify-center rounded-full bg-white text-sm font-semibold text-black transition active:scale-[0.98] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400"
+        className="flex h-12 w-full max-w-full items-center justify-center rounded-full bg-white text-sm font-semibold text-black transition active:scale-[0.98] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400"
       >
         {submitting ? 'Locking…' : 'Lock in song'}
       </button>
