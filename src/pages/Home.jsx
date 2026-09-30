@@ -327,15 +327,15 @@ export default function Home() {
       {/* Modal */}
       {mode && (
         <div className="overlay-fade fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm" onClick={() => setMode(null)}>
-          <div key={mode} className="modal-pop glass-deep my-auto max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+          <div key={mode} className="modal-pop glass-deep my-auto max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] w-full min-w-0 max-w-sm overflow-y-auto rounded-3xl p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <VibeLogo size="sm" />
               <button onClick={() => setMode(null)} aria-label="Close" className="text-zinc-500 hover:text-white"><X className="h-5 w-5" /></button>
             </div>
             <h3 className="font-display mt-4 text-xl font-black">{mode === 'create' ? 'Create a room' : 'Join a room'}</h3>
             <p className="mt-1 text-xs text-zinc-400">No signup — just a nickname. 3+ players to start.</p>
-            <form onSubmit={mode === 'create' ? handleCreate : handleJoin} className="mt-4 grid gap-3">
-              <label className="grid gap-1">
+            <form onSubmit={mode === 'create' ? handleCreate : handleJoin} className="mt-4 grid min-w-0 gap-3">
+              <label className="grid min-w-0 gap-1">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Nickname</span>
                 <input
                   value={nickname}
@@ -343,18 +343,27 @@ export default function Home() {
                   maxLength={20}
                   placeholder="e.g. Robb"
                   autoFocus
-                  className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 outline-none focus:border-violet-500"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="next"
+                  className="w-full min-w-0 max-w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-base outline-none placeholder:text-zinc-600 focus:border-violet-500"
                 />
               </label>
               {mode === 'join' && (
-                <label className="grid gap-1">
+                <label className="grid min-w-0 gap-1">
                   <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Room code</span>
                   <input
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
                     maxLength={5}
                     placeholder="K7F2Q"
-                    className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-center font-mono uppercase tracking-[0.4em] outline-none focus:border-violet-500"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    enterKeyHint="go"
+                    className="w-full min-w-0 max-w-full rounded-2xl border border-white/10 bg-black/40 py-3 pl-4 pr-2 text-center font-mono text-base uppercase tracking-[0.2em] outline-none placeholder:text-zinc-600 focus:border-violet-500 sm:tracking-[0.35em]"
                   />
                 </label>
               )}

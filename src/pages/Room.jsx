@@ -13,6 +13,8 @@ import JoinGate from '../components/JoinGate.jsx'
 import ChatPanel from '../components/ChatPanel.jsx'
 import StartCountdown from '../components/StartCountdown.jsx'
 import Toasts from '../components/Toasts.jsx'
+import AudioEnableModal from '../components/AudioEnableModal.jsx'
+import { AUDIO_ENABLED_KEY, isPhoneDevice } from '../lib/device.js'
 import Lobby from '../phases/Lobby.jsx'
 import PromptEntry from '../phases/PromptEntry.jsx'
 import SongPick from '../phases/SongPick.jsx'
@@ -45,6 +47,15 @@ export default function Room() {
   const [authReady, setAuthReady] = useState(false)
   const [copied, setCopied] = useState(false)
   const [authError, setAuthError] = useState(null)
+  // First-run sound permission (phones only): once enabled on this device,
+  // never ask again. No snooze — the Allow tap itself is the audio unlock.
+  const [audioEnabled, setAudioEnabled] = useState(() => {
+    try {
+      return localStorage.getItem(AUDIO_ENABLED_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
 
   useEffect(() => {
     ensureAnonSession().then((err) => {
@@ -346,6 +357,20 @@ export default function Room() {
         </main>
       </div>
       <Toasts toasts={toasts} />
+      {/* First-run sound permission for phones: lobby only, no dismiss path —
+          the Allow tap plays a real chime and unlocks audio for the session. */}
+      {me && room.phase === 'lobby' && !audioEnabled && isPhoneDevice() && (
+        <AudioEnableModal
+          onEnabled={() => {
+            try {
+              localStorage.setItem(AUDIO_ENABLED_KEY, '1')
+            } catch {
+              /* private mode: modal returns next visit, resume still covers */
+            }
+            setAudioEnabled(true)
+          }}
+        />
+      )}
       {/* Floating glass chat button — all phases, bottom-right on mobile + desktop. */}
       <button
         onClick={() => {
