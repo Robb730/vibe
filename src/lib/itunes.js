@@ -46,14 +46,26 @@ function normalizeTracks(json) {
   return list.filter((t) => t.previewUrl && t.trackId)
 }
 
+function proxyMissing() {
+  const err = new Error('proxy-missing')
+  err.code = 'proxy-missing'
+  return err
+}
+
 async function searchViaProxy(term, limit) {
   const url = `/api/itunes-search?term=${encodeURIComponent(term)}&limit=${limit}`
   const res = await fetchJsonWithTimeout(url, PROXY_TIMEOUT_MS)
   if (res.status === 404) {
     // Local `vite dev` without `vercel dev` — signal fallback.
-    const err = new Error('proxy-missing')
-    err.code = 'proxy-missing'
-    throw err
+    throw proxyMissing()
+  }
+  const contentType = res.headers?.get?.('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    // Plain Vite serves the api source file (or index.html) with 200 and a
+    // non-JSON body — fall back to direct iTunes instead of throwing a raw
+    // `Unexpected token ... is not valid JSON` SyntaxError at the call site.
+    console.warn(`[song-search] non-JSON proxy response (${res.status} ${contentType}), falling back to direct`)
+    throw proxyMissing()
   }
   if (!res.ok) {
     let detail = ''
@@ -64,7 +76,12 @@ async function searchViaProxy(term, limit) {
     }
     throw new Error(detail || `Song search failed (${res.status}). Try again.`)
   }
-  return normalizeTracks(await res.json())
+  try {
+    return normalizeTracks(await res.json())
+  } catch {
+    console.warn('[song-search] proxy returned invalid JSON, falling back to direct')
+    throw proxyMissing()
+  }
 }
 
 async function searchDirect(term, limit) {
@@ -84,8 +101,20 @@ export async function searchSongs(term, limit = 8) {
   const safeLimit = Math.min(Math.max(limit || 8, 1), 8)
 
   // 1) Proxy first (same-origin: no CORS, no iOS "Load failed" on preflight).
+  // Transient upstream failures (502/504/timeout) get one same-origin retry
+  // before falling back — direct iTunes is exactly what fails on iPhones,
+  // so it stays a dev-only path, never a prod-proxy fallback.
   try {
-    return await searchViaProxy(clean, safeLimit)
+    try {
+      return await searchViaProxy(clean, safeLimit)
+    } catch (proxyErr) {
+      if (proxyErr?.code !== 'proxy-missing' && /upstream failed|timed out|unreachable|50[24]|failed \(5/.test(proxyErr?.message ?? '')) {
+        console.warn('[song-search] proxy transient failure, retrying once:', proxyErr?.message)
+        await sleep(500)
+        return await searchViaProxy(clean, safeLimit)
+      }
+      throw proxyErr
+    }
   } catch (proxyErr) {
     const missing = proxyErr?.code === 'proxy-missing'
     if (!missing && !isNetworkError(proxyErr)) throw proxyErr

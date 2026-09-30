@@ -17,6 +17,7 @@ import Lobby from '../phases/Lobby.jsx'
 import PromptEntry from '../phases/PromptEntry.jsx'
 import SongPick from '../phases/SongPick.jsx'
 import Guessing from '../phases/Guessing.jsx'
+import Ranking from '../phases/Ranking.jsx'
 import Results from '../phases/Results.jsx'
 
 const MAX_PLAYERS = 8
@@ -29,12 +30,17 @@ const PHASE_LABEL = {
   results: 'Results',
 }
 
+function phaseLabel(phase, gameMode) {
+  if (phase === 'guessing' && gameMode === 'rank') return 'Ranking'
+  return PHASE_LABEL[phase] ?? phase
+}
+
 const iconBtn =
   'flex h-10 items-center justify-center gap-2 rounded-full text-zinc-500 transition active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400'
 
 export default function Room() {
   const { code } = useParams()
-  const { room, players, rounds, votes, messages, loading, error, live, roomDeleted, refreshMessages } = useRoom(code)
+  const { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages } = useRoom(code)
   const [myUserId, setMyUserId] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -245,7 +251,7 @@ export default function Room() {
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${live ? 'bg-emerald-400' : 'animate-pulse bg-amber-400'}`}
                 />
                 <span className="truncate">
-                  {PHASE_LABEL[room.phase] ?? room.phase}
+                  {phaseLabel(room.phase, room.game_mode)}
                   {host ? `, hosted by ${host.nickname}` : ''}
                 </span>
               </p>
@@ -319,18 +325,22 @@ export default function Room() {
               <div className="p-5 sm:p-8 xl:p-10">
                 {showGuessingCountdown ? (
                   <StartCountdown
-                    title="Guessing starts"
-                    subtitle="Get ready — hear the clips, catch who picked what"
+                    title={room.game_mode === 'rank' ? 'Ranking starts' : 'Guessing starts'}
+                    subtitle={room.game_mode === 'rank'
+                      ? 'Get ready — hear every clip, then rank best fit first'
+                      : 'Get ready — hear the clips, catch who picked what'}
                     chime="songs"
                     onDone={() => setShowGuessingCountdown(false)}
                   />
+                ) : room.game_mode === 'rank' ? (
+                  <Ranking room={room} players={players} rounds={rounds} rankings={rankings} me={me} />
                 ) : (
                   <Guessing room={room} players={players} rounds={rounds} votes={votes} me={me} />
                 )}
               </div>
             )}
             {room.phase === 'results' && (
-              <div className="p-5 sm:p-8 xl:p-10"><Results room={room} players={players} rounds={rounds} votes={votes} /></div>
+              <div className="p-5 sm:p-8 xl:p-10"><Results room={room} players={players} rounds={rounds} votes={votes} rankings={rankings} /></div>
             )}
           </div>
         </main>

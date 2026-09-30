@@ -1,6 +1,21 @@
-import { Crown, Hourglass, Loader2, MessageSquare, Music, Play, Trophy, Users, Disc3 } from 'lucide-react'
+import { Crown, Hourglass, ListOrdered, Loader2, MessageSquare, Music, Play, Search, Trophy, Users, Disc3 } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+
+const MODES = [
+  {
+    id: 'guess',
+    icon: Search,
+    title: 'Guess Who (OG)',
+    desc: 'Vote who picked each song. +1 per correct guess.',
+  },
+  {
+    id: 'rank',
+    icon: ListOrdered,
+    title: 'Rank the Picks',
+    desc: 'Rank songs best-fit first. Borda scoring.',
+  },
+]
 
 const STEPS = [
   { icon: MessageSquare, title: '1. Prompt Entry', desc: 'Everyone submits\na prompt (anonymous).' },
@@ -13,15 +28,18 @@ const STEPS = [
 export default function Lobby({ room, players, me }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [modeOpen, setModeOpen] = useState(false)
+  const [mode, setMode] = useState('guess')
   const canStart = players.length >= 3
   const isHost = me && me.id === room.host_id
 
-  async function start() {
+  async function start(picked = mode) {
     setBusy(true)
     setError(null)
-    const { error } = await supabase.rpc('start_game', { p_room_id: room.id })
+    const { error } = await supabase.rpc('start_game', { p_room_id: room.id, p_mode: picked })
     if (error) setError(error.message)
     setBusy(false)
+    if (!error) setModeOpen(false)
   }
 
   return (
@@ -51,7 +69,7 @@ export default function Lobby({ room, players, me }) {
         {isHost ? (
           <>
             <button
-              onClick={start}
+              onClick={() => setModeOpen(true)}
               disabled={busy || !canStart}
               className={`mx-auto mt-6 flex w-full max-w-xs items-center justify-center gap-2 rounded-full py-3.5 font-bold ${
                 canStart ? 'btn-primary' : 'cursor-not-allowed bg-white/10 text-zinc-500'
@@ -60,6 +78,68 @@ export default function Lobby({ room, players, me }) {
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} {busy ? 'Starting' : 'Start Game'}
             </button>
             {error && <p className="mx-auto mt-3 max-w-xs rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{error}</p>}
+            {modeOpen && (
+              <div
+                className="overlay-fade fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+                onClick={() => !busy && setModeOpen(false)}
+                role="presentation"
+              >
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Choose game mode"
+                  className="modal-pop grid w-full max-w-md gap-4 rounded-3xl border border-white/10 bg-zinc-950 p-5 text-left sm:p-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="grid gap-1">
+                    <h3 className="font-display text-lg font-black">Choose game mode</h3>
+                    <p className="text-sm text-zinc-400">One game, one mode. Play again returns here.</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {MODES.map((m) => {
+                      const active = mode === m.id
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => setMode(m.id)}
+                          aria-pressed={active}
+                          className={`grid min-w-0 gap-2 rounded-2xl border p-4 text-left transition active:scale-[0.98] ${
+                            active
+                              ? 'border-violet-400/60 bg-violet-600/20'
+                              : 'border-white/10 bg-white/[0.03] lg:hover:border-white/20 lg:hover:bg-white/[0.06]'
+                          }`}
+                        >
+                          <span className={`flex h-9 w-9 items-center justify-center rounded-full ${active ? 'bg-violet-500/30' : 'bg-white/10'}`}>
+                            <m.icon className={`h-4 w-4 ${active ? 'text-violet-100' : 'text-zinc-300'}`} />
+                          </span>
+                          <span className="grid gap-1">
+                            <span className="text-sm font-bold">{m.title}</span>
+                            <span className="text-xs leading-relaxed text-zinc-400">{m.desc}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setModeOpen(false)}
+                      disabled={busy}
+                      className="flex-1 rounded-full border border-white/10 py-3 text-sm font-bold text-zinc-300 transition active:scale-[0.98] disabled:opacity-50 lg:hover:bg-white/5"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => start(mode)}
+                      disabled={busy || !canStart}
+                      className="btn-primary flex flex-1 items-center justify-center gap-2 rounded-full py-3 text-sm font-bold disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      {busy ? 'Starting…' : 'Confirm & start'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="mx-auto mt-6 grid w-full max-w-xs justify-items-center gap-1.5 rounded-3xl border border-white/10 bg-black/40 p-5">

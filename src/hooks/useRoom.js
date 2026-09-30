@@ -10,6 +10,7 @@ export function useRoom(code) {
   const [players, setPlayers] = useState([])
   const [rounds, setRounds] = useState([])
   const [votes, setVotes] = useState([])
+  const [rankings, setRankings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [live, setLive] = useState(false)
@@ -36,6 +37,16 @@ export function useRoom(code) {
     async function fetchVotes(roomId) {
       const { data } = await supabase.from('votes').select('*, rounds!inner(room_id)').eq('rounds.room_id', roomId)
       if (!cancelled) setVotes((data ?? []).map(({ rounds: _r, ...rest }) => rest))
+    }
+
+    async function fetchRankings(roomId) {
+      const { data, error: rankErr } = await supabase
+        .from('rankings')
+        .select('*, rounds!inner(room_id)')
+        .eq('rounds.room_id', roomId)
+      // Pre-0011 rooms have no rankings table access: stay empty, don't crash.
+      if (rankErr) return
+      if (!cancelled) setRankings((data ?? []).map(({ rounds: _r, ...rest }) => rest))
     }
 
     async function fetchMessages(roomId) {
@@ -101,7 +112,7 @@ export function useRoom(code) {
       setRoom(roomRow)
       roomIdRef.current = roomRow.id
 
-      await Promise.all([fetchPlayers(roomRow.id), fetchRounds(roomRow.id), fetchVotes(roomRow.id), fetchMessages(roomRow.id)])
+      await Promise.all([fetchPlayers(roomRow.id), fetchRounds(roomRow.id), fetchVotes(roomRow.id), fetchRankings(roomRow.id), fetchMessages(roomRow.id)])
       if (cancelled) return
       setLoading(false)
 
@@ -129,6 +140,9 @@ export function useRoom(code) {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'votes' }, () => {
           fetchVotes(roomRow.id)
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rankings' }, () => {
+          fetchRankings(roomRow.id)
+        })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomRow.id}` }, (payload) => {
           if (payload.new) {
             // refreshMessages() after send already includes this row — don't append twice.
@@ -153,6 +167,7 @@ export function useRoom(code) {
           fetchPlayers(data.id)
           fetchRounds(data.id)
           fetchVotes(data.id)
+          fetchRankings(data.id)
         }
       })
     }
@@ -201,5 +216,5 @@ export function useRoom(code) {
     return () => clearInterval(t)
   }, [loading, refreshMessages, code])
 
-  return { room, players, rounds, votes, messages, loading, error, live, roomDeleted, refreshMessages }
+  return { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages }
 }

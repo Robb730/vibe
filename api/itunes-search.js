@@ -40,17 +40,41 @@ export default async function handler(req, res) {
     `${ITUNES_BASE}?term=${encodeURIComponent(term)}` +
     `&media=music&entity=song&limit=${limit}`
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+  // One retry for flaky mobile/shared networks before giving up.
+  let upstreamRes = null
+  let lastErr = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+    try {
+      upstreamRes = await fetch(upstream, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      })
+      if (upstreamRes.ok) break
+      lastErr = new Error(`upstream ${upstreamRes.status}`)
+      upstreamRes = null
+    } catch (err) {
+      lastErr = err
+      upstreamRes = null
+    } finally {
+      clearTimeout(timeout)
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 400))
+  }
+
+  if (!upstreamRes) {
+    const timedOut = lastErr?.name === 'AbortError'
+    const upstreamStatus = /upstream (\d+)/.exec(lastErr?.message ?? '')?.[1]
+    if (upstreamStatus) {
+      return res.status(502).json({ error: `Song search upstream failed: ${upstreamStatus}` })
+    }
+    return res.status(504).json({
+      error: timedOut ? 'Song search timed out. Try again.' : 'Song search unreachable. Try again.',
+    })
+  }
 
   try {
-    const upstreamRes = await fetch(upstream, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    })
-    if (!upstreamRes.ok) {
-      return res.status(502).json({ error: `Song search upstream failed: ${upstreamRes.status}` })
-    }
     const json = await upstreamRes.json()
     const results = (json.results ?? [])
       .filter((t) => t.previewUrl && t.trackId)
@@ -60,12 +84,7 @@ export default async function handler(req, res) {
     // when many players on the same WiFi search at once.
     res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60')
     return res.status(200).json({ results })
-  } catch (err) {
-    const timedOut = err?.name === 'AbortError'
-    return res.status(504).json({
-      error: timedOut ? 'Song search timed out. Try again.' : 'Song search unreachable. Try again.',
-    })
-  } finally {
-    clearTimeout(timeout)
+  } catch {
+    return res.status(502).json({ error: 'Song search upstream failed: bad response' })
   }
 }

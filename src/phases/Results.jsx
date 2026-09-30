@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase.js'
 import Avatar from '../components/Avatar.jsx'
 import Marquee from '../components/Marquee.jsx'
 
-export default function Results({ room, players, rounds, votes }) {
+export default function Results({ room, players, rounds, votes, rankings = [] }) {
   const ranked = [...players].sort((a, b) => b.score - a.score)
+  const isRank = room.game_mode === 'rank'
 
   const groups = useMemo(() => {
     const map = new Map()
@@ -28,7 +29,7 @@ export default function Results({ room, players, rounds, votes }) {
   }
 
   return (
-    <section className="mx-auto grid max-w-lg gap-5 lg:max-w-2xl">
+    <section className="mx-auto grid w-full min-w-0 max-w-lg gap-5 overflow-hidden lg:max-w-2xl">
       <div className="text-center">
         <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-300">5 · Reveal</p>
         <h3 className="font-display mt-1 flex items-center justify-center gap-2 text-2xl font-black">
@@ -61,21 +62,88 @@ export default function Results({ room, players, rounds, votes }) {
           </p>
           {g.songs.map((r) => {
             const picker = players.find((p) => p.id === r.picker_id)
+            if (isRank) {
+              const N = g.songs.length
+              const songRanks = rankings.filter((rk) => rk.round_id === r.id)
+              const pts = songRanks.reduce((s, rk) => s + (N - rk.rank), 0)
+              const firsts = songRanks.filter((rk) => rk.rank === 1)
+              return (
+                <div key={r.id} className="flex min-w-0 items-start gap-3 overflow-hidden rounded-3xl border border-white/5 bg-white/[0.03] p-3 sm:items-center sm:p-4">
+                  {r.artwork_url
+                    ? <img src={r.artwork_url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-2xl object-cover sm:h-14 sm:w-14" />
+                    : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-600/20 sm:h-14 sm:w-14"><Music className="h-6 w-6 text-violet-300" /></span>}
+                  <div className="grid min-w-0 flex-1 gap-1.5 text-sm">
+                    <Marquee label={`${r.title} — ${r.artist}`} className="font-bold leading-snug">
+                      {r.title} <span className="font-normal text-zinc-500">— {r.artist}</span>
+                    </Marquee>
+                    <p className="text-xs text-zinc-500">
+                      Picked by <span className="font-bold text-zinc-100">{picker?.nickname ?? '?'}</span>
+                      {' · '}
+                      <span className="font-bold text-emerald-300">+{pts} pts</span>
+                      {' · '}
+                      <span className="text-zinc-400">{firsts.length} 1st{firsts.length === 1 ? '' : 's'}</span>
+                    </p>
+                    {firsts.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-amber-300/80">1st from</span>
+                        {firsts.map((rk) => {
+                          const name = players.find((p) => p.id === rk.ranker_id)?.nickname ?? '?'
+                          return (
+                            <span
+                              key={rk.ranker_id}
+                              className="inline-flex max-w-[10rem] items-center truncate rounded-full bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-200 ring-1 ring-inset ring-amber-400/30"
+                              title={name}
+                            >
+                              <span className="truncate">{name}</span>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            }
             const correct = votes.filter((v) => v.round_id === r.id && v.guessed_id === r.picker_id)
+            const guessNames = correct.map((v) => players.find((p) => p.id === v.voter_id)?.nickname ?? '?')
             return (
-              <div key={r.id} className="flex gap-3 rounded-3xl border border-white/5 bg-white/[0.03] p-3">
+              <div key={r.id} className="flex min-w-0 items-start gap-3 overflow-hidden rounded-3xl border border-white/5 bg-white/[0.03] p-3 sm:items-center sm:p-4">
                 {r.artwork_url
                   ? <img src={r.artwork_url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-2xl object-cover sm:h-14 sm:w-14" />
                   : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-600/20 sm:h-14 sm:w-14"><Music className="h-6 w-6 text-violet-300" /></span>}
-                <div className="min-w-0 flex-1 text-sm">
-                  <Marquee label={`${r.title} — ${r.artist}`} className="font-bold">
+                <div className="grid min-w-0 flex-1 gap-1.5 text-sm">
+                  <Marquee label={`${r.title} — ${r.artist}`} className="font-bold leading-snug">
                     {r.title} <span className="font-normal text-zinc-500">— {r.artist}</span>
                   </Marquee>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
-                    Picked by {picker?.nickname ?? '?'} · {correct.length} correct
-                    {correct.length > 0 && ` (${correct.map((v) => players.find((p) => p.id === v.voter_id)?.nickname ?? '?').join(', ')})`}
+                  <p className="text-xs text-zinc-500">
+                    Picked by <span className="font-bold text-zinc-100">{picker?.nickname ?? '?'}</span>
                   </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {guessNames.length > 0 ? (
+                      <>
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-emerald-300/80">
+                          Guessed by
+                        </span>
+                        {guessNames.map((name) => (
+                          <span
+                            key={name}
+                            className="inline-flex max-w-[10rem] items-center truncate rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-200 ring-1 ring-inset ring-emerald-400/30"
+                            title={name}
+                          >
+                            <span className="truncate">{name}</span>
+                          </span>
+                        ))}
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-400 ring-1 ring-inset ring-white/10">
+                        Fooled everyone
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <span className="shrink-0 self-start rounded-full bg-emerald-400/10 px-2 py-1 font-mono text-xs font-bold tabular-nums text-emerald-300 ring-1 ring-inset ring-emerald-400/20 sm:self-center">
+                  +{correct.length}
+                </span>
               </div>
             )
           })}
