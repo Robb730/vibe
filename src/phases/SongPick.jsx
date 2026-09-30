@@ -195,7 +195,7 @@ export default function SongPick({ room, players, rounds, me }) {
   const stepIdx = mySlots.indexOf(current)
 
   return (
-    <section className="mx-auto grid max-w-lg gap-8">
+    <section className="mx-auto grid max-w-lg gap-8 lg:max-w-2xl">
       {/* Progress */}
       <div className="grid gap-3">
         <p className="text-sm font-medium tabular-nums text-zinc-400">

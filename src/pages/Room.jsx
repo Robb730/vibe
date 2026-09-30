@@ -1,7 +1,8 @@
-import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase, ensureAnonSession } from '../lib/supabase.js'
+import { playPhaseSound } from '../lib/countdownSound.js'
 import { useRoom } from '../hooks/useRoom.js'
 import VibeLogo from '../components/VibeLogo.jsx'
 import VibeLoader from '../components/VibeLoader.jsx'
@@ -10,6 +11,7 @@ import Background from '../components/Background.jsx'
 import AuthBanner from '../components/AuthBanner.jsx'
 import JoinGate from '../components/JoinGate.jsx'
 import ChatPanel from '../components/ChatPanel.jsx'
+import StartCountdown from '../components/StartCountdown.jsx'
 import Toasts from '../components/Toasts.jsx'
 import Lobby from '../phases/Lobby.jsx'
 import PromptEntry from '../phases/PromptEntry.jsx'
@@ -102,6 +104,26 @@ export default function Room() {
 
   const unread = chatOpen ? 0 : Math.max(0, messages.length - seenCount)
 
+  // Inline 3-2-1 when lobby flips to prompts (host + guests). Late joiners
+  // loading straight into prompts skip it (prevPhase starts null).
+  // Songs-open chime fires exactly once per prompts -> songs entry.
+  const [showStartCountdown, setShowStartCountdown] = useState(false)
+  const prevPhase = useRef(null)
+  const songsChimePlayed = useRef(false)
+  useEffect(() => {
+    const phase = room?.phase
+    if (!phase) return
+    if (prevPhase.current === 'lobby' && phase === 'prompts') setShowStartCountdown(true)
+    else if (phase !== 'prompts') setShowStartCountdown(false)
+    if (prevPhase.current === 'prompts' && phase === 'songs' && !songsChimePlayed.current) {
+      songsChimePlayed.current = true
+      playPhaseSound('songs')
+    } else if (phase !== 'songs') {
+      songsChimePlayed.current = false
+    }
+    prevPhase.current = phase
+  }, [room?.phase])
+
   // Room vanished (last player left): brief notice, then home.
   useEffect(() => {
     if (!roomDeleted) return
@@ -181,7 +203,7 @@ export default function Room() {
   return (
     <div className="relative min-h-[100dvh] text-zinc-100">
       <Background tone={room.phase} />
-      <div className="relative mx-auto grid w-full max-w-5xl gap-6 px-4 pb-12 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[1fr_240px] lg:grid-rows-[auto_1fr] lg:gap-x-12">
+      <div className="relative mx-auto grid w-full max-w-7xl gap-6 px-4 pb-12 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 lg:grid-cols-[minmax(0,1fr)_260px] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:px-8 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-x-10 xl:px-10">
         {/* Header */}
         <header className="grid gap-5 lg:col-start-1 lg:row-start-1">
           <div className="flex items-center gap-1">
@@ -189,28 +211,6 @@ export default function Room() {
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <VibeLogo size="sm" />
-            {room.phase !== 'lobby' && (
-              <button
-                onClick={() => {
-                  setSeenCount(messages.length)
-                  setChatOpen(true)
-                }}
-                aria-label={unread > 0 ? `Open chat, ${unread} unread messages` : 'Open chat'}
-                className={`relative ml-auto flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
-                  unread > 0
-                    ? 'bg-violet-600 text-white shadow-[0_0_28px_rgba(139,92,246,0.55)] hover:bg-violet-500'
-                    : 'bg-white/[0.07] text-zinc-100 ring-1 ring-inset ring-white/15 hover:bg-white/[0.12]'
-                }`}
-              >
-                <MessageCircle className="h-4 w-4 shrink-0" />
-                Chat
-                {unread > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[10px] font-black text-violet-700">
-                    {unread > 9 ? '9+' : unread}
-                  </span>
-                )}
-              </button>
-            )}
             <button
               onClick={async () => {
                 try {
@@ -221,7 +221,7 @@ export default function Room() {
                 window.location.href = '/'
               }}
               aria-label="Leave room"
-              className={`${iconBtn} px-3 text-sm`}
+              className={`${iconBtn} ml-auto px-3 text-sm`}
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Leave</span>
@@ -230,7 +230,7 @@ export default function Room() {
 
           <AuthBanner authError={authError} />
 
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
             <div className="min-w-0">
               <h1 className="font-display text-3xl font-black tracking-tight">{room.code}</h1>
               <p className="mt-1.5 flex items-center gap-2 truncate text-sm text-zinc-500">
@@ -300,22 +300,53 @@ export default function Room() {
           <div className="stage rounded-3xl">
             {room.phase === 'lobby' && <Lobby room={room} players={players} me={me} />}
             {room.phase === 'prompts' && (
-              <div className="p-5 sm:p-8"><PromptEntry room={room} players={players} me={me} /></div>
+              <div className="p-5 sm:p-8 xl:p-10">
+                {showStartCountdown ? (
+                  <StartCountdown onDone={() => setShowStartCountdown(false)} />
+                ) : (
+                  <PromptEntry room={room} players={players} me={me} />
+                )}
+              </div>
             )}
             {room.phase === 'songs' && (
-              <div className="p-5 sm:p-8"><SongPick room={room} players={players} rounds={rounds} me={me} /></div>
+              <div className="p-5 sm:p-8 xl:p-10"><SongPick room={room} players={players} rounds={rounds} me={me} /></div>
             )}
             {room.phase === 'guessing' && (
-              <div className="p-5 sm:p-8"><Guessing room={room} players={players} rounds={rounds} votes={votes} me={me} /></div>
+              <div className="p-5 sm:p-8 xl:p-10"><Guessing room={room} players={players} rounds={rounds} votes={votes} me={me} /></div>
             )}
             {room.phase === 'results' && (
-              <div className="p-5 sm:p-8"><Results room={room} players={players} rounds={rounds} votes={votes} /></div>
+              <div className="p-5 sm:p-8 xl:p-10"><Results room={room} players={players} rounds={rounds} votes={votes} /></div>
             )}
           </div>
         </main>
       </div>
       <Toasts toasts={toasts} />
-      {chatOpen && room.phase !== 'lobby' && (
+      {/* Floating glass chat button — all phases, bottom-right on mobile + desktop. */}
+      <button
+        onClick={() => {
+          if (!chatOpen) setSeenCount(messages.length)
+          setChatOpen((v) => !v)
+        }}
+        aria-label={
+          chatOpen ? 'Close chat' : unread > 0 ? `Open chat, ${unread} unread messages` : 'Open chat'
+        }
+        aria-expanded={chatOpen}
+        className={`glass fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full text-zinc-100 shadow-2xl shadow-black/50 backdrop-blur-xl transition active:scale-95 lg:hover:bg-white/[0.12] xl:bottom-8 xl:right-8 ${
+          unread > 0 && !chatOpen ? 'animate-pulse-ring' : ''
+        }`}
+      >
+        {chatOpen ? (
+          <X className="h-5 w-5" />
+        ) : (
+          <MessageCircle className="h-5 w-5 shrink-0" />
+        )}
+        {unread > 0 && !chatOpen && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 text-[10px] font-black text-white shadow-lg">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+      {chatOpen && (
         <ChatPanel
           room={room}
           messages={messages}

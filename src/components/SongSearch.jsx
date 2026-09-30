@@ -10,6 +10,7 @@ export default function SongSearch({ onSelect, autoFocus }) {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState(null)
   const [active, setActive] = useState(-1)
+  const [retryNonce, setRetryNonce] = useState(0)
   const boxRef = useRef(null)
   const listRef = useRef(null)
   const reqId = useRef(0)
@@ -44,7 +45,7 @@ export default function SongSearch({ onSelect, autoFocus }) {
       }
     }, 300)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, retryNonce])
 
   // Close on outside tap + Escape.
   useEffect(() => {
@@ -128,7 +129,20 @@ export default function SongSearch({ onSelect, autoFocus }) {
           className="no-scrollbar absolute inset-x-0 top-full z-50 mt-2 max-h-[55dvh] overflow-y-auto rounded-2xl bg-zinc-900 p-1.5 shadow-2xl shadow-black/60 ring-1 ring-white/10"
         >
           {error ? (
-            <li className="px-4 py-5 text-center text-sm text-red-300">{error}</li>
+            <li className="px-4 py-5 text-center">
+              <p className="text-sm text-red-300">{error}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null)
+                  setRetryNonce((n) => n + 1)
+                  setOpen(true)
+                }}
+                className="mt-3 h-9 rounded-full bg-white/10 px-5 text-sm font-medium text-white transition active:scale-95 lg:hover:bg-white/20"
+              >
+                Retry
+              </button>
+            </li>
           ) : showEmpty ? (
             <li className="px-4 py-5 text-center text-sm text-zinc-500">No songs found. Try another search.</li>
           ) : (

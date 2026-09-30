@@ -16,7 +16,7 @@ function CountdownEntry({ entryAt, promptText, promptOrd, promptCount }) {
   }, [])
   const n = Math.max(1, Math.min(3, Math.ceil(Math.max(0, entryAt - now) / 1000)))
   return (
-    <section className="mx-auto grid max-w-md justify-items-center gap-3 py-10 text-center">
+    <section className="mx-auto grid max-w-md justify-items-center gap-3 py-10 text-center lg:max-w-xl">
       <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300">
         4 · Guessing — prompt {promptOrd + 1} of {promptCount}
       </p>
@@ -308,7 +308,7 @@ export default function Guessing({ room, players, rounds, votes, me }) {
 
   if (revealed) {
     return (
-      <section className="mx-auto grid max-w-lg gap-4">
+      <section className="mx-auto grid max-w-lg gap-4 lg:max-w-xl">
         <RevealTakeover
           room={room}
           group={group}
@@ -333,7 +333,7 @@ export default function Guessing({ room, players, rounds, votes, me }) {
   }
 
   return (
-    <section className="mx-auto grid max-w-lg gap-4">
+    <section className="mx-auto grid max-w-lg gap-4 lg:max-w-xl">
       <p className="text-center text-[11px] font-bold uppercase tracking-[0.3em] text-violet-300">
         4 · Guessing — prompt {promptOrd + 1} of {promptCount}
       </p>

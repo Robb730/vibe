@@ -27,7 +27,7 @@ export default function Results({ room, players, rounds, votes }) {
   }
 
   return (
-    <section className="mx-auto grid max-w-lg gap-5">
+    <section className="mx-auto grid max-w-lg gap-5 lg:max-w-2xl">
       <div className="text-center">
         <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-300">5 · Reveal</p>
         <h3 className="font-display mt-1 flex items-center justify-center gap-2 text-2xl font-black">

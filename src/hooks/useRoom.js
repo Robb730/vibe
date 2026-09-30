@@ -130,8 +130,12 @@ export function useRoom(code) {
           fetchVotes(roomRow.id)
         })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomRow.id}` }, (payload) => {
-          if (payload.new) setMessages((ms) => [...ms.slice(-99), payload.new])
-          else fetchMessages(roomRow.id)
+          if (payload.new) {
+            // refreshMessages() after send already includes this row — don't append twice.
+            setMessages((ms) =>
+              ms.some((m) => m.id === payload.new.id) ? ms : [...ms.slice(-99), payload.new],
+            )
+          } else fetchMessages(roomRow.id)
         })
         .subscribe((status) => {
           if (!cancelled) setLive(status === 'SUBSCRIBED')
@@ -163,6 +167,7 @@ export function useRoom(code) {
   }, [code])
 
   // Manual refresh for chat (called after sending; converges with realtime).
+  // Merge-dedupe by id so a realtime INSERT landing mid-fetch can't duplicate.
   const refreshMessages = useCallback(() => {
     const id = roomIdRef.current
     if (!id) return
@@ -173,7 +178,17 @@ export function useRoom(code) {
       .order('created_at', { ascending: true })
       .limit(100)
       .then(({ data }) => {
-        if (!cancelledRef.current) setMessages(data ?? [])
+        if (cancelledRef.current || !data) return
+        setMessages((ms) => {
+          if (ms.length === 0) return data
+          const seen = new Set(ms.map((m) => m.id))
+          const fresh = data.filter((m) => !seen.has(m.id))
+          if (fresh.length === 0 && data.length === ms.length) return ms
+          const merged = [...ms, ...fresh].sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at),
+          )
+          return merged.slice(-100)
+        })
       })
   }, [])
 

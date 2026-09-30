@@ -69,7 +69,7 @@ export default function Lobby({ room, players, me }) {
           </div>
         )}
 
-        <div className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-4 border-t border-white/10 pt-6 sm:grid-cols-3 md:grid-cols-5">
+        <div className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-4 border-t border-white/10 pt-6 sm:grid-cols-3 md:grid-cols-5 lg:max-w-4xl">
           {STEPS.map((s, i) => (
             <div key={s.title} className="relative grid justify-items-center gap-1 text-center">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-600/25">
