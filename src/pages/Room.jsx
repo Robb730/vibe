@@ -1,9 +1,10 @@
-import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Copy, Crown, LogOut, MessageCircle, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase, ensureAnonSession } from '../lib/supabase.js'
+import { supabase, ensureAnonSession, leaveRoomBeacon } from '../lib/supabase.js'
 import { playPhaseSound } from '../lib/countdownSound.js'
 import { useRoom } from '../hooks/useRoom.js'
+import { useHeartbeat } from '../hooks/usePlayers.js'
 import VibeLogo from '../components/VibeLogo.jsx'
 import VibeLoader from '../components/VibeLoader.jsx'
 import Avatar from '../components/Avatar.jsx'
@@ -39,6 +40,10 @@ function phaseLabel(phase, gameMode) {
 
 const iconBtn =
   'flex h-10 items-center justify-center gap-2 rounded-full text-zinc-500 transition active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400'
+
+// Roster presence: no beat in this window -> shown as away; the server
+// prunes rows silent 90s+ (heartbeat RPC).
+const OFFLINE_MS = 45_000
 
 export default function Room() {
   const { code } = useParams()
@@ -149,17 +154,46 @@ export default function Room() {
     return () => clearTimeout(t)
   }, [roomDeleted])
 
-  // Leaving is explicit-only (the Leave button below). There is
-  // deliberately NO pagehide/beforeunload beacon here: a refresh must keep
-  // the player row so `me` resolves again after reload. Real tab closes
-  // leave a ghost row until explicit Leave / host prune; empty rooms are
-  // still deleted server-side by leave_room.
+  // Hard leave on unload: explicit Leave, tab close, AND refresh all
+  // delete the player row so the game heals and the crown always passes.
+  // Refreshes reclaim their seat via auto-rejoin below (crown stays
+  // passed). Beacon failures (crash/kill) fall back to the 90s heartbeat
+  // prune. Mobile Safari fires pagehide, not beforeunload.
   const leftRef = useRef(false)
+  useEffect(() => {
+    const id = room?.id
+    if (!id || roomDeleted) return undefined
+    function beacon() {
+      if (leftRef.current) return
+      leaveRoomBeacon(id)
+    }
+    window.addEventListener('pagehide', beacon)
+    return () => {
+      window.removeEventListener('pagehide', beacon)
+    }
+  }, [room?.id, roomDeleted])
 
-  // Auto-rejoin: if my player row is gone (e.g. deleted by the old
-  // pagehide beacon before a refresh) but this same anon session still has
-  // a stored nickname, reclaim the seat silently. join_room allows
-  // same-user rejoin even mid-game; strangers still land on JoinGate.
+  // Kicked seats stay out until restart clears bans — never auto-rejoin.
+  const [kicked, setKicked] = useState(false)
+  useEffect(() => {
+    setKicked(false)
+  }, [code])
+
+  // Ticker so offline badges go stale without waiting on realtime.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Host kick confirm state (two-tap, no modal).
+  const [kickArm, setKickArm] = useState(null)
+  const [kickBusy, setKickBusy] = useState(false)
+
+  // Auto-rejoin: the unload beacon deletes my row even on refresh, so a
+  // mid-game reload reclaims the seat silently with the stored nickname.
+  // join_room allows same-user rejoin even mid-game (crown stays passed);
+  // strangers still land on JoinGate.
   const [rejoining, setRejoining] = useState(false)
   const rejoinTriedRef = useRef(null)
   const myPlayer = myUserId ? players.find((p) => p.user_id === myUserId) : null
@@ -184,11 +218,16 @@ export default function Room() {
       if (cancelled) return
       setRejoining(false)
       if (!joinErr) refreshAll()
+      else if (/kicked/i.test(joinErr.message ?? '')) setKicked(true)
     })
     return () => {
       cancelled = true
     }
   }, [authReady, loading, room, roomDeleted, error, myPlayer, rejoining, refreshAll])
+
+  // Heartbeat liveness: refreshes keep beating (seat kept); closed tabs go
+  // quiet and the server prunes them after ~90s.
+  useHeartbeat(room?.id, !!myPlayer && !roomDeleted)
 
   if (loading || !authReady) {
     return (
@@ -239,11 +278,37 @@ export default function Room() {
 
   const host = players.find((p) => p.id === room.host_id)
   const me = myPlayer
+  const isHost = !!me && me.id === room.host_id
+
+  // Host removed me (ban lasts until restart): dedicated screen, and the
+  // auto-rejoin above already stood down via rejoinTriedRef.
+  if (kicked) {
+    return (
+      <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950 p-6 text-zinc-100">
+        <Background />
+        <div className="relative grid max-w-sm justify-items-center gap-5 text-center">
+          <VibeLogo size="sm" />
+          <div>
+            <p className="text-lg font-semibold">Removed by host</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              The host removed you from room {room.code}. Bans lift when they restart the game.
+            </p>
+          </div>
+          <Link
+            to="/"
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 text-sm font-semibold text-black transition active:scale-[0.98]"
+          >
+            Back home
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   // Invite-link visitor with no player row: nickname gate first.
-  // A refresh now keeps the row (no unload beacon), and the auto-rejoin
-  // above reclaims seats deleted by older clients — so reaching this gate
-  // mid-game means a genuinely new session, which JoinGate handles.
+  // Refreshes land here after the unload beacon and are reclaimed by the
+  // auto-rejoin above; reaching this gate mid-game otherwise means a
+  // genuinely new session, which JoinGate handles.
   if (!me) {
     if (rejoining) {
       return (
@@ -255,7 +320,22 @@ export default function Room() {
         </div>
       )
     }
-    return <JoinGate room={room} onJoined={() => { rejoinTriedRef.current = null; refreshAll() }} />
+    return <JoinGate room={room} onJoined={() => { setKicked(false); rejoinTriedRef.current = null; refreshAll() }} />
+  }
+
+  // Host kick (two-tap confirm, no modal): removal + ban until restart.
+  async function kick(p) {
+    if (!room) return
+    if (kickArm !== p.id) {
+      setKickArm(p.id)
+      setTimeout(() => setKickArm((cur) => (cur === p.id ? null : cur)), 3000)
+      return
+    }
+    setKickArm(null)
+    setKickBusy(true)
+    const { error: kickErr } = await supabase.rpc('kick_player', { p_room_id: room.id, p_player_id: p.id })
+    setKickBusy(false)
+    if (kickErr) pushToast('leave', `Couldn't remove ${p.nickname}`)
   }
 
   const inviteLink = `${window.location.origin}/room/${room.code}`
@@ -337,10 +417,16 @@ export default function Room() {
           <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6 lg:sticky lg:top-4 lg:mx-0 lg:grid lg:gap-0.5 lg:overflow-visible lg:px-0">
             {players.map((p) => {
               const isMe = p.user_id === myUserId
+              const seen = p.last_seen ? new Date(p.last_seen).getTime() : 0
+              const offline = p.last_seen ? now - seen > OFFLINE_MS : false
+              const canKick = isHost && !isMe
+              const armed = kickArm === p.id
               return (
                 <li
                   key={p.id}
-                  className="flex shrink-0 items-center gap-2.5 rounded-full bg-zinc-900 py-1 pl-1 pr-3 ring-1 ring-inset ring-white/[0.06] lg:rounded-xl lg:bg-transparent lg:py-1.5 lg:pl-1.5 lg:ring-0"
+                  className={`flex shrink-0 items-center gap-2.5 rounded-full bg-zinc-900 py-1 pl-1 pr-3 ring-1 ring-inset ring-white/[0.06] lg:rounded-xl lg:bg-transparent lg:py-1.5 lg:pl-1.5 lg:ring-0 ${
+                    offline ? 'opacity-60' : ''
+                  }`}
                 >
                   <Avatar name={p.nickname} size="sm" />
                   <span
@@ -350,8 +436,26 @@ export default function Room() {
                   >
                     {isMe ? 'You' : p.nickname}
                   </span>
+                  {room.phase === 'lobby' && p.id !== room.host_id && (
+                    p.is_ready
+                      ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label={`${p.nickname} is ready`} />
+                      : <Clock className="h-3.5 w-3.5 shrink-0 text-zinc-600" aria-label={`${p.nickname} is not ready`} />
+                  )}
+                  {offline && <span className="shrink-0 text-[11px] text-zinc-600">away</span>}
                   {p.id === room.host_id && <Crown className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-label="Host" />}
                   {p.score > 0 && <span className="text-xs tabular-nums text-zinc-500 lg:ml-auto">{p.score}pt</span>}
+                  {canKick && (
+                    <button
+                      onClick={() => kick(p)}
+                      disabled={kickBusy}
+                      aria-label={armed ? `Confirm remove ${p.nickname}` : `Remove ${p.nickname}`}
+                      className={`flex h-8 shrink-0 items-center justify-center rounded-full transition active:bg-white/10 lg:hover:bg-white/5 disabled:opacity-50 ${
+                        armed ? 'w-auto px-2.5 text-[11px] font-bold text-red-300 lg:hover:text-red-200' : 'w-8 text-zinc-600 lg:hover:text-red-300'
+                      }`}
+                    >
+                      {armed ? 'Sure?' : <X className="h-4 w-4" />}
+                    </button>
+                  )}
                 </li>
               )
             })}
@@ -362,6 +466,9 @@ export default function Room() {
               The game starts with at least 3 players.
             </p>
           )}
+          <p className="mt-3 text-[11px] leading-relaxed text-zinc-600 lg:mt-4">
+            Heads-up: closing or refreshing removes you from the game. Same-device refresh rejoins automatically, but host passes on.
+          </p>
         </aside>
 
         {/* Phase content. No overflow-hidden: the song dropdown must float above. */}

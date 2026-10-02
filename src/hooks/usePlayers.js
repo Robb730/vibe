@@ -25,3 +25,29 @@ export function usePresence(roomId, playerId) {
 
   return onlineIds
 }
+
+// Heartbeat liveness: keeps my players.last_seen fresh so closed tabs are
+// pruned server-side (~90s grace) while refreshes never lose their seat.
+// Only beats while seated; a fresh beat also fires on tab refocus.
+export function useHeartbeat(roomId, active) {
+  useEffect(() => {
+    if (!roomId || !active) return
+    let cancelled = false
+    function beat() {
+      supabase.rpc('heartbeat', { p_room_id: roomId }).then(() => {})
+    }
+    beat()
+    const t = setInterval(() => {
+      if (!cancelled) beat()
+    }, 15_000)
+    function onVisible() {
+      if (document.visibilityState === 'visible' && !cancelled) beat()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [roomId, active])
+}
