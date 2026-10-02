@@ -33,10 +33,12 @@ export default function Lobby({ room, players, me }) {
   const [readyBusy, setReadyBusy] = useState(false)
   const [readyError, setReadyError] = useState(null)
   // Host needs no toggle: Start unlocks once every OTHER member is ready.
+  // The Ready button only exists once 3+ players are in (realtime via players).
   const notReady = players.filter((p) => p.id !== room.host_id && !p.is_ready)
   const allReady = notReady.length === 0
   const readyCount = players.filter((p) => p.id === room.host_id || p.is_ready).length
-  const canStart = players.length >= 3 && allReady
+  const hasMinPlayers = players.length >= 3
+  const canStart = hasMinPlayers && allReady
   const isHost = me && me.id === room.host_id
   const imReady = !!me?.is_ready
 
@@ -72,35 +74,43 @@ export default function Lobby({ room, players, me }) {
           <Disc3 className="h-8 w-8 text-violet-300" />
         </div>
         <h2 className="font-display mt-4 text-xl font-black md:text-2xl">
-          {canStart ? (isHost ? 'Everyone’s here — start when ready' : 'Everyone’s here!') : 'Waiting for more players…'}
+          {canStart
+            ? (isHost ? 'Everyone’s here — start when ready' : 'Everyone’s here!')
+            : !hasMinPlayers
+              ? 'Waiting for more players…'
+              : isHost
+                ? 'Waiting for ready-ups…'
+                : 'Almost there…'}
         </h2>
         <p className="mt-2 text-sm text-zinc-300">
           {canStart
             ? isHost
               ? 'You’re hosting — kick it off whenever you like.'
               : 'The host will start the game any moment.'
-            : players.length < 3
+            : !hasMinPlayers
               ? 'Start when you have at least 3 players.'
               : isHost
                 ? `Waiting for ${notReady.length} more to ready up…`
                 : 'Tap Ready below so the host can start.'}
         </p>
-        <p className="mt-2 font-mono text-xs tabular-nums text-zinc-500" aria-live="polite">
-          {readyCount}/{players.length} ready
-        </p>
+        {hasMinPlayers && (
+          <p className="mt-2 font-mono text-xs tabular-nums text-zinc-500" aria-live="polite">
+            {readyCount}/{players.length} ready
+          </p>
+        )}
         {isHost ? (
           <>
             <button
               onClick={() => setModeOpen(true)}
               disabled={busy || !canStart}
-              title={!canStart && players.length >= 3 ? 'Waiting for everyone to ready up' : undefined}
+              title={!canStart && hasMinPlayers ? 'Waiting for everyone to ready up' : undefined}
               className={`mx-auto mt-6 flex w-full max-w-xs items-center justify-center gap-2 rounded-full py-3.5 font-bold ${
                 canStart ? 'btn-primary' : 'cursor-not-allowed bg-white/10 text-zinc-500'
               } disabled:opacity-70`}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} {busy ? 'Starting' : 'Start Game'}
             </button>
-            {!canStart && players.length >= 3 && (
+            {!canStart && hasMinPlayers && (
               <p className="mx-auto mt-3 max-w-xs text-xs text-zinc-500">
                 Waiting for {notReady.length} more to ready up…
               </p>
@@ -171,18 +181,26 @@ export default function Lobby({ room, players, me }) {
           </>
         ) : (
           <div className="mx-auto mt-6 grid w-full max-w-xs justify-items-center gap-3 rounded-3xl border border-white/10 bg-black/40 p-5">
-            <button
-              onClick={toggleReady}
-              disabled={readyBusy}
-              aria-pressed={imReady}
-              className={`flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold transition active:scale-[0.98] disabled:opacity-50 ${
-                imReady ? 'bg-emerald-500 text-black lg:hover:brightness-110' : 'btn-primary'
-              }`}
-            >
-              {readyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : imReady ? <Check className="h-4 w-4" /> : null}
-              {readyBusy ? 'Saving…' : imReady ? 'Ready! Tap to unready' : 'I’m Ready'}
-            </button>
-            {readyError && <p className="w-full rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{readyError}</p>}
+            {hasMinPlayers ? (
+              <>
+                <button
+                  onClick={toggleReady}
+                  disabled={readyBusy}
+                  aria-pressed={imReady}
+                  className={`flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold transition active:scale-[0.98] disabled:opacity-50 ${
+                    imReady ? 'bg-emerald-500 text-black lg:hover:brightness-110' : 'btn-primary'
+                  }`}
+                >
+                  {readyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : imReady ? <Check className="h-4 w-4" /> : null}
+                  {readyBusy ? 'Saving…' : imReady ? 'Ready! Tap to unready' : 'I’m Ready'}
+                </button>
+                {readyError && <p className="w-full rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{readyError}</p>}
+              </>
+            ) : (
+              <p className="text-sm leading-relaxed text-zinc-400">
+                Share the invite link — the Ready button appears at 3 players.
+              </p>
+            )}
             <div className="grid justify-items-center gap-1.5">
               <Hourglass className="animate-hourglass h-5 w-5 text-amber-300" />
               <p className="text-sm font-bold">Waiting for the host…</p>

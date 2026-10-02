@@ -1,8 +1,8 @@
 import { Volume1, Volume2, VolumeX } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { getVolume, setVolume, subscribeVolume } from '../lib/volume.js'
+import { getVolume, setVolume, subscribeVolume, unlockMasterAudio } from '../lib/volume.js'
 
-// Room clip-volume mixer (song clips only — phase chimes stay full).
+// Master mixer for all game audio (song clips, previews, chimes).
 // Mobile-first: the panel is a thumb-friendly bottom sheet on phones and a
 // compact dropdown on sm+ screens. Level persists per device.
 export default function VolumeControl({ iconClass }) {
@@ -42,7 +42,13 @@ export default function VolumeControl({ iconClass }) {
   const pct = Math.round(volume * 100)
 
   function toggleMute() {
+    unlockMasterAudio()
     setVolume(muted ? lastAudible.current : 0)
+  }
+
+  function changeVolume(pctValue) {
+    unlockMasterAudio()
+    setVolume(pctValue / 100)
   }
 
   return (
@@ -77,7 +83,7 @@ export default function VolumeControl({ iconClass }) {
               max={100}
               step={1}
               value={pct}
-              onChange={(e) => setVolume(Number(e.target.value) / 100)}
+              onChange={(e) => changeVolume(Number(e.target.value))}
               aria-label="Clip volume"
               aria-valuetext={`${pct} percent`}
               className="h-11 min-w-0 flex-1 cursor-pointer accent-violet-400"
@@ -87,7 +93,7 @@ export default function VolumeControl({ iconClass }) {
             </span>
           </div>
           <p className="mt-2 text-center text-xs text-zinc-500 sm:text-left">
-            Song clips only — chimes stay full volume.
+            Master volume — clips, previews &amp; chimes.
           </p>
         </div>
       )}

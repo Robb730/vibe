@@ -324,6 +324,9 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <VibeLogo size="sm" />
             <span className="text-xs">© 2026 vibe by RJO</span>
+            <span className="rounded-full bg-white/5 px-2 py-0.5 font-mono text-[10px] font-bold text-zinc-500 ring-1 ring-inset ring-white/10">
+              beta 1.0.0
+            </span>
           </div>
           <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-semibold">
             <a href="#how" className="transition hover:text-white">How It Works</a>

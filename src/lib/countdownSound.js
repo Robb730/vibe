@@ -3,6 +3,9 @@
 //   public/sounds/songs-open.mp3    (music stage entry)
 // Missing files = silent, no errors. Browsers may block audio until the
 // user has tapped once; failures are swallowed on purpose.
+// All chimes obey the master mixer (volume.js gain stage).
+
+import { routeElement, syncElementVolume } from './volume.js'
 
 const PROMPTS_OPEN_SRC = '/sounds/prompts-open.mp3'
 const SONGS_OPEN_SRC = '/sounds/songs-open.mp3'
@@ -42,6 +45,8 @@ function playSrc(src) {
     if (!base) return
     // Clone so rapid triggers don't cut each other off.
     const el = base.cloneNode()
+    routeElement(el)
+    syncElementVolume(el)
     el.play()?.catch?.(() => {})
   } catch {
     // silent fallback

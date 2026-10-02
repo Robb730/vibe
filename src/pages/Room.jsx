@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Clock, Copy, Crown, LogOut, MessageCircle, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Clock, Copy, Crown, LogOut, MessageCircle, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase, ensureAnonSession, leaveRoomBeacon } from '../lib/supabase.js'
@@ -40,6 +40,56 @@ function phaseLabel(phase, gameMode) {
 
 const iconBtn =
   'flex h-10 items-center justify-center gap-2 rounded-full text-zinc-500 transition active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400'
+
+// One roster row, shared by the mobile expanded list and the desktop
+// sidebar: avatar, name, ready pill (lobby), away dim, crown, score, kick.
+function PlayerRow({ p, isMe, showReady, isHostRow, offline, canKick, armed, kickBusy, onKick }) {
+  return (
+    <li
+      className={`flex items-center gap-2.5 rounded-2xl bg-zinc-900 px-2 py-1.5 ring-1 ring-inset ring-white/[0.06] lg:rounded-xl lg:bg-transparent lg:py-1.5 lg:pl-1.5 lg:ring-0 ${
+        offline ? 'opacity-60' : ''
+      }`}
+    >
+      <Avatar name={p.nickname} size="sm" />
+      <span
+        className={`min-w-0 flex-1 truncate text-sm ${
+          isMe ? 'font-semibold text-white' : 'font-medium text-zinc-300'
+        }`}
+      >
+        {isMe ? 'You' : p.nickname}
+      </span>
+      {showReady && (
+        <span
+          role="status"
+          aria-label={`${isMe ? 'You are' : `${p.nickname} is`} ${p.is_ready ? 'ready' : 'not ready'}`}
+          className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${
+            p.is_ready
+              ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30'
+              : 'bg-white/5 text-zinc-400 ring-white/10'
+          }`}
+        >
+          {p.is_ready ? <Check className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+          {p.is_ready ? 'Ready' : 'Waiting'}
+        </span>
+      )}
+      {offline && <span className="shrink-0 text-[11px] text-zinc-600">away</span>}
+      {isHostRow && <Crown className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-label="Host" />}
+      {p.score > 0 && <span className="shrink-0 text-xs tabular-nums text-zinc-500">{p.score}pt</span>}
+      {canKick && (
+        <button
+          onClick={onKick}
+          disabled={kickBusy}
+          aria-label={armed ? `Confirm remove ${p.nickname}` : `Remove ${p.nickname}`}
+          className={`flex h-8 shrink-0 items-center justify-center rounded-full transition active:bg-white/10 lg:hover:bg-white/5 disabled:opacity-50 ${
+            armed ? 'w-auto px-2.5 text-[11px] font-bold text-red-300 lg:hover:text-red-200' : 'w-8 text-zinc-600 lg:hover:text-red-300'
+          }`}
+        >
+          {armed ? 'Sure?' : <X className="h-4 w-4" />}
+        </button>
+      )}
+    </li>
+  )
+}
 
 // Roster presence: no beat in this window -> shown as away; the server
 // prunes rows silent 90s+ (heartbeat RPC).
@@ -190,6 +240,9 @@ export default function Room() {
   const [kickArm, setKickArm] = useState(null)
   const [kickBusy, setKickBusy] = useState(false)
 
+  // Mobile roster: collapsed bar by default, tap to expand the full list.
+  const [rosterOpen, setRosterOpen] = useState(false)
+
   // Auto-rejoin: the unload beacon deletes my row even on refresh, so a
   // mid-game reload reclaims the seat silently with the stored nickname.
   // join_room allows same-user rejoin even mid-game (crown stays passed);
@@ -336,10 +389,35 @@ export default function Room() {
     const { error: kickErr } = await supabase.rpc('kick_player', { p_room_id: room.id, p_player_id: p.id })
     setKickBusy(false)
     if (kickErr) pushToast('leave', `Couldn't remove ${p.nickname}`)
+    else pushToast('leave', `Removed ${p.nickname} — they can't rejoin until restart`)
   }
 
   const inviteLink = `${window.location.origin}/room/${room.code}`
   const spotsLeft = Math.max(0, MAX_PLAYERS - players.length)
+
+  // Roster helpers (mobile bar + shared rows).
+  const isLobby = room.phase === 'lobby'
+  const readyCount = players.filter((p) => p.id === room.host_id || p.is_ready).length
+  function isOffline(p) {
+    if (!p.last_seen) return false
+    const seen = new Date(p.last_seen).getTime()
+    return Number.isFinite(seen) && now - seen > OFFLINE_MS
+  }
+  const awayCount = players.filter(isOffline).length
+  function rowProps(p) {
+    const isMe = p.user_id === myUserId
+    return {
+      p,
+      isMe,
+      showReady: isLobby && p.id !== room.host_id,
+      isHostRow: p.id === room.host_id,
+      offline: isOffline(p),
+      canKick: isHost && !isMe,
+      armed: kickArm === p.id,
+      kickBusy,
+      onKick: () => kick(p),
+    }
+  }
 
   function copy() {
     navigator.clipboard?.writeText(inviteLink).then(() => {
@@ -406,59 +484,59 @@ export default function Room() {
           </div>
         </header>
 
-        {/* Roster: horizontal strip on mobile, sidebar on desktop */}
-        <aside className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:pt-1">
+        {/* Roster: compact bar + expandable list on mobile, sidebar on desktop */}
+        <aside className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:pt-1">
+          <div className="lg:hidden">
+            <button
+              onClick={() => setRosterOpen((v) => !v)}
+              aria-expanded={rosterOpen}
+              aria-label={rosterOpen ? 'Hide player list' : `Show player list, ${players.length} in room`}
+              className="flex min-h-[3rem] w-full items-center gap-3 rounded-2xl bg-zinc-900 px-3 py-2 text-left ring-1 ring-inset ring-white/[0.06] transition active:scale-[0.99]"
+            >
+              <span className="flex shrink-0 -space-x-2">
+                {players.slice(0, 5).map((p) => (
+                  <span key={p.id} className="rounded-full ring-2 ring-zinc-950">
+                    <Avatar name={p.nickname} size="sm" />
+                  </span>
+                ))}
+                {players.length > 5 && (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-700 text-[11px] font-bold text-zinc-200 ring-2 ring-zinc-950">
+                    +{players.length - 5}
+                  </span>
+                )}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-200">
+                {players.length} player{players.length === 1 ? '' : 's'}
+                {isLobby && (
+                  <span className="font-normal text-zinc-500"> · {readyCount}/{players.length} ready</span>
+                )}
+                {awayCount > 0 && (
+                  <span className="font-normal text-zinc-500"> · {awayCount} away</span>
+                )}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${rosterOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {rosterOpen && (
+              <ul className="mt-2 grid gap-1.5">
+                {players.map((p) => (
+                  <PlayerRow key={p.id} {...rowProps(p)} />
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="mb-3 hidden items-baseline justify-between lg:flex">
             <p className="text-sm font-medium text-zinc-300">Players</p>
             <p className="text-xs tabular-nums text-zinc-600">
               {players.length} of {MAX_PLAYERS}
             </p>
           </div>
-          <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6 lg:sticky lg:top-4 lg:mx-0 lg:grid lg:gap-0.5 lg:overflow-visible lg:px-0">
-            {players.map((p) => {
-              const isMe = p.user_id === myUserId
-              const seen = p.last_seen ? new Date(p.last_seen).getTime() : 0
-              const offline = p.last_seen ? now - seen > OFFLINE_MS : false
-              const canKick = isHost && !isMe
-              const armed = kickArm === p.id
-              return (
-                <li
-                  key={p.id}
-                  className={`flex shrink-0 items-center gap-2.5 rounded-full bg-zinc-900 py-1 pl-1 pr-3 ring-1 ring-inset ring-white/[0.06] lg:rounded-xl lg:bg-transparent lg:py-1.5 lg:pl-1.5 lg:ring-0 ${
-                    offline ? 'opacity-60' : ''
-                  }`}
-                >
-                  <Avatar name={p.nickname} size="sm" />
-                  <span
-                    className={`max-w-[9rem] truncate text-sm lg:max-w-none lg:flex-1 ${
-                      isMe ? 'font-semibold text-white' : 'font-medium text-zinc-300'
-                    }`}
-                  >
-                    {isMe ? 'You' : p.nickname}
-                  </span>
-                  {room.phase === 'lobby' && p.id !== room.host_id && (
-                    p.is_ready
-                      ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label={`${p.nickname} is ready`} />
-                      : <Clock className="h-3.5 w-3.5 shrink-0 text-zinc-600" aria-label={`${p.nickname} is not ready`} />
-                  )}
-                  {offline && <span className="shrink-0 text-[11px] text-zinc-600">away</span>}
-                  {p.id === room.host_id && <Crown className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-label="Host" />}
-                  {p.score > 0 && <span className="text-xs tabular-nums text-zinc-500 lg:ml-auto">{p.score}pt</span>}
-                  {canKick && (
-                    <button
-                      onClick={() => kick(p)}
-                      disabled={kickBusy}
-                      aria-label={armed ? `Confirm remove ${p.nickname}` : `Remove ${p.nickname}`}
-                      className={`flex h-8 shrink-0 items-center justify-center rounded-full transition active:bg-white/10 lg:hover:bg-white/5 disabled:opacity-50 ${
-                        armed ? 'w-auto px-2.5 text-[11px] font-bold text-red-300 lg:hover:text-red-200' : 'w-8 text-zinc-600 lg:hover:text-red-300'
-                      }`}
-                    >
-                      {armed ? 'Sure?' : <X className="h-4 w-4" />}
-                    </button>
-                  )}
-                </li>
-              )
-            })}
+          <ul className="hidden lg:sticky lg:top-4 lg:grid lg:gap-0.5">
+            {players.map((p) => (
+              <PlayerRow key={p.id} {...rowProps(p)} />
+            ))}
           </ul>
           {room.phase === 'lobby' && (
             <p className="mt-4 hidden text-xs leading-relaxed text-zinc-600 lg:block">
@@ -466,7 +544,7 @@ export default function Room() {
               The game starts with at least 3 players.
             </p>
           )}
-          <p className="mt-3 text-[11px] leading-relaxed text-zinc-600 lg:mt-4">
+          <p className="mt-3 break-words text-[11px] leading-relaxed text-zinc-600 lg:mt-4">
             Heads-up: closing or refreshing removes you from the game. Same-device refresh rejoins automatically, but host passes on.
           </p>
         </aside>
