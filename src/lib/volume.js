@@ -107,6 +107,9 @@ export function unlockMasterAudio() {
 // MediaElementSource per element).
 export function routeElement(el) {
   if (!el || !ctx || !master) return
+  // Never route non-CORS media: cross-origin audio without the opt-in
+  // plays silence through Web Audio. Such elements keep element.volume.
+  if (el.crossOrigin !== 'anonymous') return
   try {
     if (ctx.state !== 'running') return
   } catch {

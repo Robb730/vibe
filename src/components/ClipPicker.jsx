@@ -100,7 +100,7 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
   return (
     <div className="grid min-w-0 max-w-full gap-5 overflow-hidden">
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <audio ref={audioRef} src={previewUrl} preload="auto" onTimeUpdate={onTimeUpdate} onEnded={stop} />
+      <audio ref={audioRef} crossOrigin="anonymous" src={previewUrl} preload="auto" onTimeUpdate={onTimeUpdate} onEnded={stop} />
 
       <div className="min-w-0 max-w-full">
         <div

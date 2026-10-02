@@ -25,6 +25,7 @@ function ensureEl() {
   if (typeof window === 'undefined' || typeof window.Audio === 'undefined') return null
   try {
     el = new window.Audio()
+    el.crossOrigin = 'anonymous'
     el.preload = 'auto'
   } catch {
     return null
