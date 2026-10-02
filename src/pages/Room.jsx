@@ -41,6 +41,37 @@ function phaseLabel(phase, gameMode) {
 const iconBtn =
   'flex h-10 items-center justify-center gap-2 rounded-full text-zinc-500 transition active:bg-white/10 lg:hover:bg-white/5 lg:hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400'
 
+// Flags telling "my own refresh" apart from "host removed me". Unload is
+// session-scoped (survives refresh in the same tab, not new tabs); kicked
+// is persistent (a kicked-then-refreshed tab must not auto-rejoin).
+function unloadKey(roomId) {
+  return `vibe-unloaded-${roomId}`
+}
+function kickedKey(roomId) {
+  return `vibe-kicked-${roomId}`
+}
+function readFlag(store, key) {
+  try {
+    return store.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+function writeFlag(store, key) {
+  try {
+    store.setItem(key, '1')
+  } catch {
+    /* storage blocked: fall back to in-memory state */
+  }
+}
+function clearFlag(store, key) {
+  try {
+    store.removeItem(key)
+  } catch {
+    /* ignore */
+  }
+}
+
 // One roster row, shared by the mobile expanded list and the desktop
 // sidebar: avatar, name, ready pill (lobby), away dim, crown, score, kick.
 function PlayerRow({ p, isMe, showReady, isHostRow, offline, canKick, armed, kickBusy, onKick }) {
@@ -215,6 +246,9 @@ export default function Room() {
     if (!id || roomDeleted) return undefined
     function beacon() {
       if (leftRef.current) return
+      // Mark my own unload so the next load knows this was a refresh,
+      // not a host kick (sessionStorage survives refresh, not new tabs).
+      writeFlag(sessionStorage, unloadKey(id))
       leaveRoomBeacon(id)
     }
     window.addEventListener('pagehide', beacon)
@@ -223,10 +257,13 @@ export default function Room() {
     }
   }, [room?.id, roomDeleted])
 
-  // Kicked seats stay out until restart clears bans — never auto-rejoin.
+  // Removed-by-host state. Persists across reloads so a kicked-then-
+  // refreshed tab shows Rejoin instead of silently auto-rejoining.
   const [kicked, setKicked] = useState(false)
+  const [rejoinError, setRejoinError] = useState(null)
   useEffect(() => {
     setKicked(false)
+    setRejoinError(null)
   }, [code])
 
   // Ticker so offline badges go stale without waiting on realtime.
@@ -245,8 +282,9 @@ export default function Room() {
 
   // Auto-rejoin: the unload beacon deletes my row even on refresh, so a
   // mid-game reload reclaims the seat silently with the stored nickname.
-  // join_room allows same-user rejoin even mid-game (crown stays passed);
-  // strangers still land on JoinGate.
+  // join_room allows same-user rejoin even mid-game (crown stays passed).
+  // A missing row with NO unload flag in this tab session means the host
+  // removed me -> kicked screen (with a working Rejoin button) instead.
   const [rejoining, setRejoining] = useState(false)
   const rejoinTriedRef = useRef(null)
   const myPlayer = myUserId ? players.find((p) => p.user_id === myUserId) : null
@@ -257,6 +295,16 @@ export default function Room() {
     // auto-join. Mid-game, a missing row means a lost seat, so reclaim it.
     if (room.phase === 'lobby') return
     if (rejoinTriedRef.current === room.id) return
+    // Previously removed (flag survives reloads): don't auto-rejoin.
+    if (readFlag(localStorage, kickedKey(room.id))) {
+      setKicked(true)
+      return
+    }
+    if (!readFlag(sessionStorage, unloadKey(room.id))) {
+      writeFlag(localStorage, kickedKey(room.id))
+      setKicked(true)
+      return
+    }
     let nick = ''
     try {
       nick = (localStorage.getItem('vibe-nickname') ?? '').trim().slice(0, 20)
@@ -270,8 +318,10 @@ export default function Room() {
     supabase.rpc('join_room', { p_code: room.code, p_nickname: nick }).then(({ error: joinErr }) => {
       if (cancelled) return
       setRejoining(false)
-      if (!joinErr) refreshAll()
-      else if (/kicked/i.test(joinErr.message ?? '')) setKicked(true)
+      if (!joinErr) {
+        clearFlag(sessionStorage, unloadKey(room.id))
+        refreshAll()
+      }
     })
     return () => {
       cancelled = true
@@ -333,8 +383,8 @@ export default function Room() {
   const me = myPlayer
   const isHost = !!me && me.id === room.host_id
 
-  // Host removed me (ban lasts until restart): dedicated screen, and the
-  // auto-rejoin above already stood down via rejoinTriedRef.
+  // Host removed me: dedicated screen with immediate Rejoin (kicks no
+  // longer ban). The unload flag is absent, so auto-rejoin stood down.
   if (kicked) {
     return (
       <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950 p-6 text-zinc-100">
@@ -344,18 +394,58 @@ export default function Room() {
           <div>
             <p className="text-lg font-semibold">Removed by host</p>
             <p className="mt-1 text-sm text-zinc-500">
-              The host removed you from room {room.code}. Bans lift when they restart the game.
+              The host removed you from room {room.code}. You can rejoin right away.
             </p>
           </div>
-          <Link
-            to="/"
-            className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 text-sm font-semibold text-black transition active:scale-[0.98]"
-          >
-            Back home
-          </Link>
+          {rejoinError && <p className="w-full rounded-2xl bg-red-950/80 p-3 text-xs text-red-300">{rejoinError}</p>}
+          <div className="grid w-full gap-2">
+            <button
+              onClick={rejoinManually}
+              disabled={rejoining}
+              className="btn-primary flex h-12 items-center justify-center rounded-full px-7 text-sm font-bold disabled:opacity-50"
+            >
+              {rejoining ? 'Rejoining…' : 'Rejoin room'}
+            </button>
+            <Link
+              to="/"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/10 px-7 text-sm font-semibold text-zinc-300 transition active:scale-[0.98] lg:hover:bg-white/5"
+            >
+              Back home
+            </Link>
+          </div>
         </div>
       </div>
     )
+  }
+
+  // Manual rejoin after removal (or after a refresh left no nickname to
+  // reclaim with): clears the flags and rejoins with the stored nickname.
+  // No stored nickname -> fall through to the JoinGate form below.
+  async function rejoinManually() {
+    if (!room || rejoining) return
+    let nick = ''
+    try {
+      nick = (localStorage.getItem('vibe-nickname') ?? '').trim().slice(0, 20)
+    } catch {
+      nick = ''
+    }
+    if (!nick) {
+      setKicked(false)
+      return
+    }
+    setRejoining(true)
+    setRejoinError(null)
+    const { error: joinErr } = await supabase.rpc('join_room', { p_code: room.code, p_nickname: nick })
+    setRejoining(false)
+    if (!joinErr) {
+      clearFlag(localStorage, kickedKey(room.id))
+      clearFlag(sessionStorage, unloadKey(room.id))
+      rejoinTriedRef.current = null
+      setKicked(false)
+      refreshAll()
+    } else {
+      setRejoinError(joinErr.message)
+    }
   }
 
   // Invite-link visitor with no player row: nickname gate first.
@@ -373,10 +463,10 @@ export default function Room() {
         </div>
       )
     }
-    return <JoinGate room={room} onJoined={() => { setKicked(false); rejoinTriedRef.current = null; refreshAll() }} />
+    return <JoinGate room={room} onJoined={() => { setKicked(false); clearFlag(localStorage, kickedKey(room.id)); rejoinTriedRef.current = null; refreshAll() }} />
   }
 
-  // Host kick (two-tap confirm, no modal): removal + ban until restart.
+  // Host kick (two-tap confirm, no modal): removal only, they may rejoin.
   async function kick(p) {
     if (!room) return
     if (kickArm !== p.id) {
@@ -389,7 +479,7 @@ export default function Room() {
     const { error: kickErr } = await supabase.rpc('kick_player', { p_room_id: room.id, p_player_id: p.id })
     setKickBusy(false)
     if (kickErr) pushToast('leave', `Couldn't remove ${p.nickname}`)
-    else pushToast('leave', `Removed ${p.nickname} — they can't rejoin until restart`)
+    else pushToast('leave', `Removed ${p.nickname} — they can rejoin with the link`)
   }
 
   const inviteLink = `${window.location.origin}/room/${room.code}`

@@ -10,7 +10,6 @@ import VibeLogo from './VibeLogo.jsx'
 const JOIN_TIMEOUT_MS = 15_000
 
 function friendlyJoinError(msg, midGame) {
-  if (/kicked/i.test(msg ?? '')) return 'The host removed you — bans lift when they restart the game.'
   if (/already started/i.test(msg ?? '')) {
     return midGame
       ? 'This game already started and this device has no seat to reclaim — ask the host for the next round.'
