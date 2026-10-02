@@ -1,5 +1,6 @@
 import { Pause, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { getVolume, subscribeVolume } from '../lib/volume.js'
 
 const CLIP = 10
 const TOTAL = 30
@@ -23,6 +24,22 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
 
   useEffect(() => () => audioRef.current?.pause(), [])
 
+  // Song clips obey the room mixer (live: applies mid-preview too).
+  useEffect(() => {
+    const apply = (v) => {
+      const el = audioRef.current
+      if (el) {
+        try {
+          el.volume = v
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    apply(getVolume())
+    return subscribeVolume(apply)
+  }, [previewUrl])
+
   function stop() {
     audioRef.current?.pause()
     setPlaying(false)
@@ -33,6 +50,11 @@ export default function ClipPicker({ previewUrl, clipStart, setClipStart, onSubm
     const el = audioRef.current
     if (!el) return
     el.currentTime = clipStart
+    try {
+      el.volume = getVolume()
+    } catch {
+      /* ignore */
+    }
     setProgress(0)
     setPlaying(true)
     el.play().catch(() => setPlaying(false))

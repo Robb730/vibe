@@ -10,6 +10,8 @@
 // Plain <audio> elements throughout (playback category: robust to the
 // silent switch, unlike Web Audio).
 
+import { getVolume } from './volume.js'
+
 const UNLOCK_CHIME_SRC = '/sounds/songs-open.mp3'
 
 let el = null
@@ -24,6 +26,7 @@ function ensureEl() {
   try {
     el = new window.Audio()
     el.preload = 'auto'
+    el.volume = getVolume()
   } catch {
     return null
   }
@@ -106,6 +109,12 @@ export function playClip(song, { onBlocked, onBroken, onPlaying } = {}) {
     }
     let pr = null
     try {
+      // Re-apply on every play: the mixer may have moved mid-session.
+      try {
+        target.volume = getVolume()
+      } catch {
+        /* ignore */
+      }
       pr = target.play()
     } catch {
       detachPlaying()

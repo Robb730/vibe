@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Copy, Crown, LogOut, MessageCircle } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase, ensureAnonSession, leaveRoomBeacon } from '../lib/supabase.js'
+import { supabase, ensureAnonSession } from '../lib/supabase.js'
 import { playPhaseSound } from '../lib/countdownSound.js'
 import { useRoom } from '../hooks/useRoom.js'
 import VibeLogo from '../components/VibeLogo.jsx'
@@ -13,6 +13,7 @@ import JoinGate from '../components/JoinGate.jsx'
 import ChatPanel from '../components/ChatPanel.jsx'
 import StartCountdown from '../components/StartCountdown.jsx'
 import Toasts from '../components/Toasts.jsx'
+import VolumeControl from '../components/VolumeControl.jsx'
 import '../lib/audio.js'
 import Lobby from '../phases/Lobby.jsx'
 import PromptEntry from '../phases/PromptEntry.jsx'
@@ -41,11 +42,15 @@ const iconBtn =
 
 export default function Room() {
   const { code } = useParams()
-  const { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages, refreshAll } = useRoom(code)
   const [myUserId, setMyUserId] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [copied, setCopied] = useState(false)
   const [authError, setAuthError] = useState(null)
+
+  // Single auth gate: useRoom only queries once the anon session exists,
+  // so cold invite opens never query as role `anon` (which hides rows via
+  // RLS and surfaces as "Room not found" / "Not in this room").
+  const { room, players, rounds, votes, rankings, messages, loading, error, live, roomDeleted, refreshMessages, refreshAll } = useRoom(authReady ? code : null)
 
   useEffect(() => {
     ensureAnonSession().then((err) => {
@@ -144,25 +149,46 @@ export default function Room() {
     return () => clearTimeout(t)
   }, [roomDeleted])
 
-  // Tab close ONLY (mobile Safari fires pagehide, not beforeunload):
-  // best-effort leave so rosters update in realtime and empty rooms get
-  // deleted. Tab switches, minimizes, and lock screens must NOT leave —
-  // so there is deliberately no visibilitychange-hidden beacon here.
-  // leave_room no-ops when the row is gone, so double-sends with the
-  // Leave button are harmless.
+  // Leaving is explicit-only (the Leave button below). There is
+  // deliberately NO pagehide/beforeunload beacon here: a refresh must keep
+  // the player row so `me` resolves again after reload. Real tab closes
+  // leave a ghost row until explicit Leave / host prune; empty rooms are
+  // still deleted server-side by leave_room.
   const leftRef = useRef(false)
+
+  // Auto-rejoin: if my player row is gone (e.g. deleted by the old
+  // pagehide beacon before a refresh) but this same anon session still has
+  // a stored nickname, reclaim the seat silently. join_room allows
+  // same-user rejoin even mid-game; strangers still land on JoinGate.
+  const [rejoining, setRejoining] = useState(false)
+  const rejoinTriedRef = useRef(null)
+  const myPlayer = myUserId ? players.find((p) => p.user_id === myUserId) : null
   useEffect(() => {
-    const id = room?.id
-    if (!id || roomDeleted) return undefined
-    function beacon() {
-      if (leftRef.current) return
-      leaveRoomBeacon(id)
+    if (!authReady || loading || !room || roomDeleted || error) return
+    if (myPlayer || rejoining) return
+    // Lobby visitors must confirm their nickname via JoinGate — never
+    // auto-join. Mid-game, a missing row means a lost seat, so reclaim it.
+    if (room.phase === 'lobby') return
+    if (rejoinTriedRef.current === room.id) return
+    let nick = ''
+    try {
+      nick = (localStorage.getItem('vibe-nickname') ?? '').trim().slice(0, 20)
+    } catch {
+      nick = ''
     }
-    window.addEventListener('pagehide', beacon)
+    if (!nick) return
+    rejoinTriedRef.current = room.id
+    let cancelled = false
+    setRejoining(true)
+    supabase.rpc('join_room', { p_code: room.code, p_nickname: nick }).then(({ error: joinErr }) => {
+      if (cancelled) return
+      setRejoining(false)
+      if (!joinErr) refreshAll()
+    })
     return () => {
-      window.removeEventListener('pagehide', beacon)
+      cancelled = true
     }
-  }, [room?.id, roomDeleted])
+  }, [authReady, loading, room, roomDeleted, error, myPlayer, rejoining, refreshAll])
 
   if (loading || !authReady) {
     return (
@@ -212,16 +238,24 @@ export default function Room() {
   }
 
   const host = players.find((p) => p.id === room.host_id)
-  const me = players.find((p) => p.user_id === myUserId)
+  const me = myPlayer
 
   // Invite-link visitor with no player row: nickname gate first.
-  // Reload after join guarantees entry even if realtime isn't applied yet;
-  // with 0003 applied the reload is a harmless one-time cost.
+  // A refresh now keeps the row (no unload beacon), and the auto-rejoin
+  // above reclaims seats deleted by older clients — so reaching this gate
+  // mid-game means a genuinely new session, which JoinGate handles.
   if (!me) {
-    // In-place entry: refresh state instead of reloading, so joining can
-    // never race an unload (reload + pagehide beacon used to delete the
-    // just-created row and bounce phone users back to this gate).
-    return <JoinGate room={room} onJoined={() => refreshAll()} />
+    if (rejoining) {
+      return (
+        <div className="relative flex min-h-[100dvh] items-center justify-center bg-zinc-950">
+          <Background />
+          <div className="relative px-6">
+            <VibeLoader message="Rejoining room" sub={code ? `Room ${String(code).toUpperCase()}` : 'Finding your vibe'} />
+          </div>
+        </div>
+      )
+    }
+    return <JoinGate room={room} onJoined={() => { rejoinTriedRef.current = null; refreshAll() }} />
   }
 
   const inviteLink = `${window.location.origin}/room/${room.code}`
@@ -241,26 +275,26 @@ export default function Room() {
         {/* Header */}
         <header className="grid gap-5 lg:col-start-1 lg:row-start-1">
           <div className="flex items-center gap-1">
-            <Link to="/" aria-label="Back home" className={`${iconBtn} -ml-2 w-10`}>
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
             <VibeLogo size="sm" />
-            <button
-              onClick={async () => {
-                leftRef.current = true
-                try {
-                  await supabase.rpc('leave_room', { p_room_id: room.id })
-                } catch {
-                  /* going home anyway */
-                }
-                window.location.href = '/'
-              }}
-              aria-label="Leave room"
-              className={`${iconBtn} ml-auto px-3 text-sm`}
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Leave</span>
-            </button>
+            <div className="ml-auto flex items-center gap-1">
+              <VolumeControl iconClass={iconBtn} />
+              <button
+                onClick={async () => {
+                  leftRef.current = true
+                  try {
+                    await supabase.rpc('leave_room', { p_room_id: room.id })
+                  } catch {
+                    /* going home anyway */
+                  }
+                  window.location.href = '/'
+                }}
+                aria-label="Leave room"
+                className={`${iconBtn} px-3 text-sm`}
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Leave</span>
+              </button>
+            </div>
           </div>
 
           <AuthBanner authError={authError} />

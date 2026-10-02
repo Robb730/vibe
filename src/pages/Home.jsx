@@ -26,7 +26,13 @@ const STEPS = [
 ]
 
 export default function Home() {
-  const [nickname, setNickname] = useState('')
+  const [nickname, setNickname] = useState(() => {
+    try {
+      return localStorage.getItem('vibe-nickname') ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [code, setCode] = useState('')
   const [mode, setMode] = useState(null) // 'create' | 'join' | null
   const [showCredits, setShowCredits] = useState(false)
@@ -49,6 +55,11 @@ export default function Home() {
     try {
       const { data, error } = await supabase.rpc('create_room', { p_nickname: nickname.trim() })
       if (error) throw error
+      try {
+        localStorage.setItem('vibe-nickname', nickname.trim().slice(0, 20))
+      } catch {
+        /* non-fatal */
+      }
       const roomCode = typeof data === 'string' ? data : data?.code
       navigate(`/room/${roomCode}`)
     } catch (err) {
@@ -69,6 +80,11 @@ export default function Home() {
         p_nickname: nickname.trim(),
       })
       if (error) throw error
+      try {
+        localStorage.setItem('vibe-nickname', nickname.trim().slice(0, 20))
+      } catch {
+        /* non-fatal */
+      }
       navigate(`/room/${code.trim().toUpperCase()}`)
     } catch (err) {
       setError(err.message)
@@ -341,7 +357,7 @@ export default function Home() {
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   maxLength={20}
-                  placeholder="e.g. Robb"
+                  placeholder="e.g. RJ"
                   autoFocus
                   autoComplete="off"
                   autoCorrect="off"

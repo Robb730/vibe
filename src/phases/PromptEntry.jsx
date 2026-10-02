@@ -7,6 +7,13 @@ import { supabase } from '../lib/supabase.js'
 // one use per player per room — survives play-again via players.used_prompt_lifeline.
 const LIFELINE_DELAY_MS = 40_000
 
+function friendlyPromptError(msg) {
+  if (/not in this room/i.test(msg ?? '')) {
+    return 'You lost your seat in this room (e.g. after leaving or switching browsers). Go back home and rejoin with the invite link.'
+  }
+  return msg
+}
+
 export default function PromptEntry({ room, players, me }) {
   const [text, setText] = useState('')
   const [done, setDone] = useState(false)
@@ -36,7 +43,7 @@ export default function PromptEntry({ room, players, me }) {
       p_room_id: room.id,
       p_text: text.trim().slice(0, 60),
     })
-    if (error) setError(error.message)
+    if (error) setError(friendlyPromptError(error.message))
     else setDone(true)
     setBusy(false)
   }
@@ -49,7 +56,9 @@ export default function PromptEntry({ room, players, me }) {
     })
     if (error) {
       const msg = error.message ?? ''
-      if (/NO_PAST_PROMPTS/.test(msg)) {
+      if (/not in this room/i.test(msg)) {
+        setLifelineError(friendlyPromptError(msg))
+      } else if (/NO_PAST_PROMPTS/.test(msg)) {
         setLifelineError("No past prompts yet — your group hasn't finished a game. Ask a friend for a nudge!")
       } else if (/LIFELINE_USED/.test(msg)) {
         setLifelineClaimed(true)

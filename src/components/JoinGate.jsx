@@ -1,43 +1,36 @@
-import { ArrowRight, Ban, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import VibeLogo from './VibeLogo.jsx'
 
 // Gate for visitors opening an invite link who aren't players yet.
-// Mid-game arrivals are blocked (no spectator mode in MVP).
+// Mid-game arrivals with the SAME anon session reclaim their seat
+// (join_room rejoin path); genuinely new sessions are told to wait for the
+// next round.
 const JOIN_TIMEOUT_MS = 15_000
 
-function friendlyJoinError(msg) {
-  if (/already started/i.test(msg ?? '')) return 'This game already started — ask the host for the next round.'
+function friendlyJoinError(msg, midGame) {
+  if (/already started/i.test(msg ?? '')) {
+    return midGame
+      ? 'This game already started and this device has no seat to reclaim — ask the host for the next round.'
+      : 'This game already started — ask the host for the next round.'
+  }
   if (/full/i.test(msg ?? '')) return 'Room is full (8 max) — wait for the next game.'
   return msg
 }
 
 export default function JoinGate({ room, onJoined }) {
-  const [nickname, setNickname] = useState('')
+  const [nickname, setNickname] = useState(() => {
+    try {
+      return localStorage.getItem('vibe-nickname') ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  if (room.phase !== 'lobby') {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center bg-[#07070d] p-6">
-        <div className="glass-deep w-full max-w-sm rounded-3xl p-8 text-center">
-          <VibeLogo size="sm" />
-          <div className="mx-auto mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15">
-            <Ban className="h-6 w-6 text-red-300" />
-          </div>
-          <p className="font-display mt-4 text-xl font-black">Game already started</p>
-          <p className="mt-2 text-sm text-zinc-400">
-            Room <span className="font-mono font-bold text-zinc-200">{room.code}</span> is mid-game.
-            Ask the host for the next round!
-          </p>
-          <a href="/" className="btn-light mt-6 inline-block rounded-full px-6 py-2.5 text-sm font-bold">
-            Back home
-          </a>
-        </div>
-      </div>
-    )
-  }
+  const midGame = room.phase !== 'lobby'
 
   async function join(e) {
     e.preventDefault()
@@ -62,11 +55,16 @@ export default function JoinGate({ room, onJoined }) {
         new Promise((_, reject) => setTimeout(() => reject(new Error('JOIN_TIMEOUT')), JOIN_TIMEOUT_MS)),
       ])
       if (error) throw error
+      try {
+        localStorage.setItem('vibe-nickname', nickname.trim().slice(0, 20))
+      } catch {
+        /* non-fatal */
+      }
       onJoined?.()
     } catch (err) {
       setError(err?.message === 'JOIN_TIMEOUT'
         ? 'Still trying — check your connection and tap Join again.'
-        : friendlyJoinError(err.message))
+        : friendlyJoinError(err.message, midGame))
     } finally {
       setBusy(false)
     }
@@ -77,9 +75,14 @@ export default function JoinGate({ room, onJoined }) {
       <div className="modal-pop glass-deep w-full max-w-sm rounded-3xl p-8">
         <div className="flex justify-center"><VibeLogo size="sm" /></div>
         <p className="mt-4 text-center text-[11px] font-bold uppercase tracking-[0.3em] text-zinc-500">
-          You&apos;re invited to room
+          {midGame ? 'Rejoin room' : 'You\u2019re invited to room'}
         </p>
         <p className="mt-1 text-center font-mono text-3xl font-black tracking-[0.3em]">{room.code}</p>
+        {midGame && (
+          <p className="mt-3 text-center text-xs leading-relaxed text-zinc-400">
+            This game already started — enter your nickname to reclaim your seat.
+          </p>
+        )}
         <form onSubmit={join} className="mt-6 grid gap-3">
           <label className="grid gap-1">
             <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Your nickname</span>
@@ -87,7 +90,7 @@ export default function JoinGate({ room, onJoined }) {
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               maxLength={20}
-              placeholder="e.g. Robb"
+              placeholder="e.g. RJ"
               autoFocus
               className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 outline-none focus:border-violet-500"
             />
@@ -97,7 +100,7 @@ export default function JoinGate({ room, onJoined }) {
             {busy ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Joining<span className="reveal-dots" /></>
             ) : (
-              <>Join room <ArrowRight className="h-4 w-4" /></>
+              <>{midGame ? 'Rejoin' : 'Join room'} <ArrowRight className="h-4 w-4" /></>
             )}
           </button>
         </form>
