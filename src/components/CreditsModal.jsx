@@ -63,7 +63,7 @@ export default function CreditsModal({ onClose }) {
               <Users className="h-3.5 w-3.5" /> Suggestions &amp; Playtesting
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {['Hensley', 'Yukari', 'Toni', 'Lanz'].map((n) => (
+              {['Hensley', 'Yukari', 'Toni', 'Lanz', 'ppnara'].map((n) => (
                 <span key={n} className="rounded-full bg-white/10 px-3.5 py-1.5 text-sm font-bold text-white">
                   {n}
                 </span>
